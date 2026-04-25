@@ -1,9 +1,20 @@
 "use client";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Flame, Medal, Square, Shield, Trophy } from "lucide-react";
 
-const topScorers = [
+import { useMemo, useState } from "react";
+import {
+  Activity,
+  BarChart3,
+  Flame,
+  Medal,
+  ShieldCheck,
+  Square,
+  Target,
+  Trophy,
+} from "lucide-react";
+
+type Tab = "resumen" | "goleadoras" | "fairplay";
+
+const scorers = [
   { id: 1, name: "Martina López", team: "Mirasoles Col.", goals: 14, category: "C1C" },
   { id: 2, name: "Lucía Díaz", team: "Crisol Fed.", goals: 11, category: "C1C" },
   { id: 3, name: "Ana Gómez", team: "Torreón Col.", goals: 9, category: "C1C" },
@@ -11,112 +22,469 @@ const topScorers = [
   { id: 5, name: "Valentina Ruiz", team: "Los Cerros Col.", goals: 5, category: "C1C" },
 ];
 
-const topCards = [
+const teams = [
+  { id: 1, team: "Mirasoles Col.", goals: 23, against: 4, pts: 24, trend: "Alta" },
+  { id: 2, team: "Torreón Col.", goals: 18, against: 5, pts: 21, trend: "Alta" },
+  { id: 3, team: "Los Cerros Col.", goals: 15, against: 8, pts: 18, trend: "Media" },
+  { id: 4, team: "El Faro", goals: 13, against: 9, pts: 17, trend: "Media" },
+];
+
+const cards = [
   { id: 1, name: "Sofía Pérez", team: "El Faro", green: 3, yellow: 1 },
   { id: 2, name: "Julieta Sosa", team: "Mirasoles Col.", green: 2, yellow: 0 },
+  { id: 3, name: "Ana Gómez", team: "Torreón Col.", green: 1, yellow: 1 },
+  { id: 4, name: "Lucía Díaz", team: "Crisol Fed.", green: 1, yellow: 0 },
 ];
 
 export default function EstadisticasPage() {
-  const [activeTab, setActiveTab] = useState<"goleadoras" | "tarjetas">("goleadoras");
-  const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
+  const [activeTab, setActiveTab] = useState<Tab>("resumen");
+
+  const totalGoals = useMemo(
+    () => teams.reduce((acc, team) => acc + team.goals, 0),
+    []
+  );
+
+  const leader = scorers[0];
+  const bestDefense = [...teams].sort((a, b) => a.against - b.against)[0];
+  const maxGoals = Math.max(...scorers.map((player) => player.goals));
 
   return (
-    <div className="min-h-full flex flex-col w-full bg-[#f8fafc]">
-      
-      <header className="bg-white/80 backdrop-blur-2xl sticky top-0 z-40 border-b border-slate-200/60 pt-12 pb-6 px-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-         <div>
-           <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">Estadísticas</h1>
-           <p className="text-sm font-semibold text-slate-500 mt-1">Líderes del torneo</p>
-         </div>
-         
-         <div className="flex p-1 bg-slate-100/80 rounded-2xl border border-slate-200/50 w-full md:w-auto">
-           <button onClick={() => setActiveTab("goleadoras")} className={`flex-1 md:px-6 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "goleadoras" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Goleadoras</button>
-           <button onClick={() => setActiveTab("tarjetas")} className={`flex-1 md:px-6 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === "tarjetas" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Fair Play</button>
-         </div>
-      </header>
+    <main className="min-h-screen overflow-x-hidden bg-[#f6f4ee] text-[#151711]">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 md:px-8 md:pb-12">
+        <header className="mb-7">
+          <div className="mb-5 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <h1 className="max-w-3xl text-[2.6rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
+                Estadísticas{" "}
+                <span className="relative inline-block">
+                  <span className="relative z-10">APDES</span>
+                  <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" />
+                </span>
+              </h1>
 
-      <div className="p-4 md:p-8 max-w-4xl mx-auto w-full flex-1">
-        <AnimatePresence mode="wait">
-          
-          {activeTab === "goleadoras" && (
-            <motion.div key="goleadoras" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="flex flex-col gap-8">
-              
-              {/* EL PODIO (TOP 3) */}
-              <div className="flex items-end justify-center gap-2 md:gap-6 mt-8 mb-4 h-64">
-                
-                {/* 2do Puesto */}
-                <div className="flex flex-col items-center w-28 md:w-36">
-                  <div className="w-14 h-14 rounded-full bg-slate-100 border-4 border-slate-300 flex items-center justify-center text-sm font-black text-slate-500 shadow-lg z-10 relative">
-                     {getInitials(topScorers[1].name)}
-                     <div className="absolute -bottom-2 bg-slate-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">2°</div>
-                  </div>
-                  <div className="bg-gradient-to-t from-slate-200 to-slate-100 w-full h-24 rounded-t-2xl mt-[-20px] flex flex-col items-center justify-end pb-4 border-t border-x border-slate-300/50 shadow-inner">
-                     <span className="text-2xl font-black text-slate-700">{topScorers[1].goals}</span>
-                     <span className="text-[9px] font-black uppercase text-slate-500">Goles</span>
-                  </div>
-                  <span className="text-xs font-bold text-slate-800 mt-3 text-center leading-tight">{topScorers[1].name}</span>
+              <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[#62675d]">
+                Rendimiento, goleadoras, tarjetas y datos clave del torneo.
+              </p>
+            </div>
+
+            <nav className="flex rounded-full border border-[#ded9cc] bg-white/75 p-1 shadow-sm">
+              <TabButton
+                active={activeTab === "resumen"}
+                onClick={() => setActiveTab("resumen")}
+                label="Resumen"
+              />
+              <TabButton
+                active={activeTab === "goleadoras"}
+                onClick={() => setActiveTab("goleadoras")}
+                label="Goles"
+              />
+              <TabButton
+                active={activeTab === "fairplay"}
+                onClick={() => setActiveTab("fairplay")}
+                label="Fair Play"
+              />
+            </nav>
+          </div>
+        </header>
+
+        {activeTab === "resumen" && (
+          <section className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                label="Goles totales"
+                value={totalGoals}
+                icon={Target}
+                detail="En partidos registrados"
+              />
+              <MetricCard
+                label="Máxima goleadora"
+                value={leader.goals}
+                icon={Flame}
+                detail={leader.name}
+              />
+              <MetricCard
+                label="Mejor defensa"
+                value={bestDefense.against}
+                icon={ShieldCheck}
+                detail={bestDefense.team}
+              />
+              <MetricCard
+                label="Equipos activos"
+                value={teams.length}
+                icon={Trophy}
+                detail="Con estadísticas cargadas"
+              />
+            </div>
+
+            <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
+              <div className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
+                <div className="mb-5">
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                    Rendimiento
+                  </p>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                    Goles por equipo
+                  </h2>
                 </div>
 
-                {/* 1er Puesto (El más alto) */}
-                <div className="flex flex-col items-center w-32 md:w-44 z-10">
-                  <Trophy className="w-8 h-8 text-yellow-500 mb-2 drop-shadow-md" fill="currentColor" />
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-100 to-yellow-50 border-4 border-yellow-400 flex items-center justify-center text-xl font-black text-yellow-700 shadow-2xl relative">
-                     {getInitials(topScorers[0].name)}
-                     <div className="absolute -bottom-3 bg-yellow-500 text-yellow-950 text-[10px] px-3 py-0.5 rounded-full font-black shadow-sm">1° LÍDER</div>
-                  </div>
-                  <div className="bg-gradient-to-t from-yellow-200 via-yellow-100 to-yellow-50 w-full h-36 rounded-t-2xl mt-[-28px] flex flex-col items-center justify-end pb-6 border-t border-x border-yellow-300 shadow-[0_-10px_20px_rgba(234,179,8,0.15)]">
-                     <span className="text-4xl font-black text-yellow-800">{topScorers[0].goals}</span>
-                     <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">Goles</span>
-                  </div>
-                  <span className="text-sm font-black text-slate-900 mt-3 text-center leading-tight">{topScorers[0].name}</span>
+                <div className="space-y-4">
+                  {teams.map((team) => (
+                    <TeamBar key={team.id} team={team} max={23} />
+                  ))}
                 </div>
-
-                {/* 3er Puesto */}
-                <div className="flex flex-col items-center w-28 md:w-36">
-                  <div className="w-14 h-14 rounded-full bg-orange-50 border-4 border-orange-300 flex items-center justify-center text-sm font-black text-orange-700 shadow-lg z-10 relative">
-                     {getInitials(topScorers[2].name)}
-                     <div className="absolute -bottom-2 bg-orange-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">3°</div>
-                  </div>
-                  <div className="bg-gradient-to-t from-orange-100 to-orange-50 w-full h-20 rounded-t-2xl mt-[-20px] flex flex-col items-center justify-end pb-3 border-t border-x border-orange-200 shadow-inner">
-                     <span className="text-xl font-black text-orange-800">{topScorers[2].goals}</span>
-                     <span className="text-[8px] font-black uppercase text-orange-600">Goles</span>
-                  </div>
-                  <span className="text-xs font-bold text-slate-800 mt-3 text-center leading-tight">{topScorers[2].name}</span>
-                </div>
-
               </div>
 
-              {/* El Resto del Ranking */}
-              <div className="bg-white border border-slate-100 rounded-[28px] overflow-hidden shadow-sm mt-4">
-                {topScorers.slice(3).map((player, index) => (
-                  <div key={player.id} className="flex items-center justify-between p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-black text-slate-400 w-6 text-center">{index + 4}°</span>
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xs font-black text-slate-600">{getInitials(player.name)}</div>
-                      <div>
-                        <h3 className="font-bold text-sm text-slate-900">{player.name}</h3>
-                        <p className="text-[10px] font-semibold text-slate-500">{player.team} • {player.category}</p>
-                      </div>
-                    </div>
-                    <span className="text-lg font-black text-slate-700 w-12 text-center">{player.goals}</span>
+              <div className="rounded-[30px] bg-[#151711] p-5 text-white shadow-[0_18px_50px_rgba(21,23,17,0.16)]">
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">
+                      Lectura rápida
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                      Qué mirar
+                    </h2>
                   </div>
+                  <BarChart3 className="h-6 w-6 text-[#d7c77a]" />
+                </div>
+
+                <div className="space-y-3">
+                  <Insight text="Mirasoles Col. lidera en puntos y también en goles convertidos." />
+                  <Insight text="Torreón Col. mantiene una diferencia alta con pocos goles recibidos." />
+                  <Insight text="El Faro y Los Cerros están cerca en rendimiento general." />
+                </div>
+              </div>
+            </section>
+          </section>
+        )}
+
+        {activeTab === "goleadoras" && (
+          <section className="space-y-6">
+            <Podium players={scorers.slice(0, 3)} />
+
+            <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
+              <div className="mb-5">
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                  Ranking
+                </p>
+                <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                  Tabla de goleadoras
+                </h2>
+              </div>
+
+              <div className="space-y-3">
+                {scorers.map((player, index) => (
+                  <ScorerRow
+                    key={player.id}
+                    player={player}
+                    position={index + 1}
+                    maxGoals={maxGoals}
+                  />
                 ))}
               </div>
-            </motion.div>
-          )}
+            </section>
+          </section>
+        )}
 
-          {/* TARJETAS QUEDA IGUAL, REDISEÑADO MINIMALISTA */}
-          {activeTab === "tarjetas" && (
-            <motion.div key="tarjetas" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}>
-              <div className="bg-white border border-slate-100 rounded-[28px] overflow-hidden shadow-sm mt-4">
-                 {/* ... (el código de tarjetas que ya tenías queda perfecto acá) */}
-                 <div className="p-8 text-center text-slate-500 font-bold">Ranking de Tarjetas Activo</div>
+        {activeTab === "fairplay" && (
+          <section className="space-y-6">
+            <div className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
+              <div className="mb-5">
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                  Disciplina
+                </p>
+                <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                  Tarjetas registradas
+                </h2>
+                <p className="mt-2 text-sm font-medium text-[#62675d]">
+                  Seguimiento simple de tarjetas verdes y amarillas.
+                </p>
               </div>
-            </motion.div>
-          )}
 
-        </AnimatePresence>
+              <div className="grid gap-3 md:grid-cols-2">
+                {cards.map((player) => (
+                  <CardStat key={player.id} player={player} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[30px] bg-[#151711] p-5 text-white">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#d7c77a]">
+                Fair Play
+              </p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                Mejor lectura
+              </h2>
+              <p className="mt-3 text-sm font-medium leading-6 text-white/55">
+                Conviene mirar no solo la cantidad de tarjetas, sino también si se
+                concentran en un mismo equipo o en una misma categoría.
+              </p>
+            </div>
+          </section>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full px-3 py-2.5 text-xs font-black transition sm:px-4 sm:text-sm ${
+        active ? "bg-[#151711] text-white" : "text-[#74786a]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: typeof Trophy;
+}) {
+  return (
+    <article className="rounded-[26px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm">
+      <div className="mb-5 flex items-center justify-between">
+        <Icon className="h-5 w-5 text-[#74786a]" />
+        <span className="h-2 w-2 rounded-full bg-[#d7c77a]" />
+      </div>
+
+      <p className="text-3xl font-black tracking-[-0.07em]">{value}</p>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+        {label}
+      </p>
+      <p className="mt-2 truncate text-xs font-bold text-[#62675d]">
+        {detail}
+      </p>
+    </article>
+  );
+}
+
+function TeamBar({
+  team,
+  max,
+}: {
+  team: { team: string; goals: number; against: number; pts: number; trend: string };
+  max: number;
+}) {
+  const width = `${Math.max(8, (team.goals / max) * 100)}%`;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black">{team.team}</p>
+          <p className="text-xs font-bold text-[#74786a]">
+            {team.pts} pts · {team.against} goles recibidos
+          </p>
+        </div>
+        <p className="shrink-0 text-lg font-black">{team.goals}</p>
+      </div>
+
+      <div className="h-3 overflow-hidden rounded-full bg-[#eee9dd]">
+        <div className="h-full rounded-full bg-[#151711]" style={{ width }} />
       </div>
     </div>
   );
+}
+
+function Insight({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+      <p className="text-sm font-medium leading-6 text-white/70">{text}</p>
+    </div>
+  );
+}
+
+function Podium({
+  players,
+}: {
+  players: {
+    id: number;
+    name: string;
+    team: string;
+    goals: number;
+    category: string;
+  }[];
+}) {
+  const ordered = [players[1], players[0], players[2]];
+
+  return (
+    <section className="rounded-[34px] bg-[#151711] p-5 text-white shadow-[0_18px_50px_rgba(21,23,17,0.16)] md:p-7">
+      <div className="mb-7">
+        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#d7c77a]">
+          Podio
+        </p>
+        <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+          Goleadoras destacadas
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-3 items-end gap-2 md:gap-5">
+        {ordered.map((player, index) => {
+          const realPosition = player.id === players[0].id ? 1 : player.id === players[1].id ? 2 : 3;
+          const isFirst = realPosition === 1;
+
+          return (
+            <div key={player.id} className="text-center">
+              {isFirst && (
+                <Trophy className="mx-auto mb-2 h-7 w-7 text-[#d7c77a]" />
+              )}
+
+              <div
+                className={`mx-auto flex items-center justify-center rounded-full border font-black ${
+                  isFirst
+                    ? "h-16 w-16 border-[#d7c77a] bg-white text-[#151711]"
+                    : "h-12 w-12 border-white/15 bg-white/10 text-white"
+                }`}
+              >
+                {getInitials(player.name)}
+              </div>
+
+              <div
+                className={`mt-3 rounded-t-3xl border border-b-0 border-white/10 bg-white/[0.06] p-3 ${
+                  isFirst ? "h-32" : realPosition === 2 ? "h-24" : "h-20"
+                } flex flex-col justify-end`}
+              >
+                <p className="text-3xl font-black tracking-[-0.07em]">
+                  {player.goals}
+                </p>
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-white/40">
+                  goles
+                </p>
+              </div>
+
+              <p className="mt-3 truncate text-xs font-black">{player.name}</p>
+              <p className="truncate text-[10px] font-bold text-white/45">
+                {realPosition}° · {player.team}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ScorerRow({
+  player,
+  position,
+  maxGoals,
+}: {
+  player: {
+    id: number;
+    name: string;
+    team: string;
+    goals: number;
+    category: string;
+  };
+  position: number;
+  maxGoals: number;
+}) {
+  const width = `${Math.max(10, (player.goals / maxGoals) * 100)}%`;
+
+  return (
+    <article className="rounded-2xl border border-[#eee9dd] bg-[#fbfaf6] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${
+              position <= 3 ? "bg-[#151711] text-[#d7c77a]" : "bg-[#eee9dd] text-[#74786a]"
+            }`}
+          >
+            {position}
+          </span>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black">{player.name}</p>
+            <p className="truncate text-xs font-bold text-[#74786a]">
+              {player.team} · {player.category}
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="text-xl font-black">{player.goals}</p>
+          <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#74786a]">
+            goles
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#eee9dd]">
+        <div className="h-full rounded-full bg-[#151711]" style={{ width }} />
+      </div>
+    </article>
+  );
+}
+
+function CardStat({
+  player,
+}: {
+  player: { id: number; name: string; team: string; green: number; yellow: number };
+}) {
+  return (
+    <article className="rounded-[24px] border border-[#eee9dd] bg-[#fbfaf6] p-4">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f0ede3] text-xs font-black text-[#74786a]">
+          {getInitials(player.name)}
+        </div>
+
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black">{player.name}</p>
+          <p className="truncate text-xs font-bold text-[#74786a]">
+            {player.team}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-white p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Square className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
+              Verde
+            </p>
+          </div>
+          <p className="text-2xl font-black">{player.green}</p>
+        </div>
+
+        <div className="rounded-2xl bg-white p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Square className="h-4 w-4 fill-[#d7c77a] text-[#d7c77a]" />
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
+              Amarilla
+            </p>
+          </div>
+          <p className="text-2xl font-black">{player.yellow}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function getInitials(name: string) {
+  return name
+    .replace(".", "")
+    .split(" ")
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
 }

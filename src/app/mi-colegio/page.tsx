@@ -1,373 +1,865 @@
 "use client";
+
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Clock, ShieldCheck, Activity, Target, Square, X, CalendarDays } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Activity,
+  CalendarDays,
+  Clock,
+  MapPin,
+  ShieldCheck,
+  Square,
+  Target,
+  Trophy,
+  X,
+} from "lucide-react";
 
-// ─────────────────────────────────────────────
-// COMPONENTES VISUALES Y 3D
-// ─────────────────────────────────────────────
+type MatchStatus = "finalizado" | "por_jugar";
+type EventType = "goal" | "green_card" | "yellow_card";
 
-// Esferas 3D Flotantes para el Hero
-const Floating3DBalls = ({ ballColor }: { ballColor: string }) => {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {/* Esfera 1 - Grande y principal */}
-      <motion.div
-        animate={{ y: [0, -20, 0], x: [0, 10, 0], rotate: [0, 10, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute -right-10 top-10 w-48 h-48 md:w-64 md:h-64 rounded-full opacity-90 shadow-2xl"
-        style={{ background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), ${ballColor} 60%, rgba(0,0,0,0.6))` }}
-      />
-      {/* Esfera 2 - Mediana desenfocada en el fondo */}
-      <motion.div
-        animate={{ y: [0, 30, 0], x: [0, -15, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute right-32 md:right-56 -bottom-10 w-32 h-32 md:w-40 md:h-40 rounded-full opacity-60 blur-[3px]"
-        style={{ background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.6), ${ballColor} 60%, rgba(0,0,0,0.8))` }}
-      />
-      {/* Esfera 3 - Pequeña y nítida */}
-      <motion.div
-        animate={{ y: [0, -15, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-        className="absolute right-1/4 top-5 w-16 h-16 md:w-20 md:h-20 rounded-full opacity-100 shadow-xl"
-        style={{ background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), ${ballColor} 50%, rgba(0,0,0,0.5))` }}
-      />
-    </div>
-  );
+type MatchEvent = {
+  id: number;
+  minute: number;
+  type: EventType;
+  player: string;
+  team: "teamA" | "teamB";
 };
 
-// Cancha de Hockey 
-const HockeyField = ({ courtName }: { courtName: string }) => (
-  <div className="relative w-full h-48 bg-emerald-600 rounded-2xl border-4 border-white/20 overflow-hidden shadow-inner flex items-center justify-center">
-    <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(0,0,0,0.1) 20px, rgba(0,0,0,0.1) 40px)" }} />
-    <div className="absolute top-1/2 left-0 w-full h-[2px] bg-white/60 -translate-y-1/2" />
-    <div className="absolute top-1/2 left-1/2 w-16 h-16 -translate-x-1/2 -translate-y-1/2 border-2 border-white/60 rounded-full" />
-    <div className="absolute top-0 left-1/2 w-32 h-16 -translate-x-1/2 border-2 border-white/60 rounded-b-[100px] border-t-0" />
-    <div className="absolute top-0 left-1/2 w-12 h-6 -translate-x-1/2 border-2 border-white/60 rounded-b-[50px] border-t-0 bg-white/10" />
-    <div className="absolute bottom-0 left-1/2 w-32 h-16 -translate-x-1/2 border-2 border-white/60 rounded-t-[100px] border-b-0" />
-    <div className="absolute bottom-0 left-1/2 w-12 h-6 -translate-x-1/2 border-2 border-white/60 rounded-t-[50px] border-b-0 bg-white/10" />
-    <div className="relative z-10 bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl flex items-center gap-2 shadow-xl">
-       <MapPin size={16} className="text-emerald-400" />
-       <span className="text-white font-black uppercase tracking-widest text-xs">{courtName}</span>
-    </div>
-  </div>
-);
-
-// ─────────────────────────────────────────────
-// CONFIGURACIÓN DINÁMICA DE COLORES
-// ─────────────────────────────────────────────
-const schoolThemes: Record<string, any> = {
-  "Mirasoles": {
-    gradient: "from-emerald-900 to-[#0A2E1C]",
-    textLight: "text-emerald-400",
-    glow: "bg-emerald-500/20",
-    badge: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    ballColor: "rgba(16, 185, 129, 0.8)", // Verde Esmeralda
-  },
-  "Torreón": {
-    gradient: "from-blue-900 to-[#0A192F]",
-    textLight: "text-blue-400",
-    glow: "bg-blue-500/20",
-    badge: "bg-blue-50 text-blue-700 border-blue-100",
-    ballColor: "rgba(59, 130, 246, 0.8)", // Azul
-  },
-  "Crisol": {
-    gradient: "from-rose-900 to-[#2E0A16]",
-    textLight: "text-rose-400",
-    glow: "bg-rose-500/20",
-    badge: "bg-rose-50 text-rose-700 border-rose-100",
-    ballColor: "rgba(225, 29, 72, 0.8)", // Rojo Rose
-  },
-  "El Faro": {
-    gradient: "from-amber-900 to-[#2E1A0A]",
-    textLight: "text-amber-400",
-    glow: "bg-amber-500/20",
-    badge: "bg-amber-50 text-amber-700 border-amber-100",
-    ballColor: "rgba(245, 158, 11, 0.8)", // Amarillo/Ambar
-  },
-  "Buen Ayre": {
-    gradient: "from-indigo-900 to-[#120A2E]",
-    textLight: "text-indigo-400",
-    glow: "bg-indigo-500/20",
-    badge: "bg-indigo-50 text-indigo-700 border-indigo-100",
-    ballColor: "rgba(99, 102, 241, 0.8)", // Indigo
-  },
-  "Los Cerros": {
-    gradient: "from-violet-900 to-[#1A0A2E]",
-    textLight: "text-violet-400",
-    glow: "bg-violet-500/20",
-    badge: "bg-violet-50 text-violet-700 border-violet-100",
-    ballColor: "rgba(139, 92, 246, 0.8)", // Violeta
-  }
+type Match = {
+  id: number;
+  time?: string;
+  date: string;
+  category: string;
+  court: string;
+  teamA: string;
+  teamB: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  status: MatchStatus;
+  result?: "win" | "loss" | "draw";
+  events: MatchEvent[];
 };
 
-const colegios = ["Mirasoles", "Torreón", "Crisol", "El Faro", "Buen Ayre", "Los Cerros"];
-
-// ─────────────────────────────────────────────
-// DATOS MOCK
-// ─────────────────────────────────────────────
-const mockSchoolStats = {
-  "Mirasoles": { pts: 24, pj: 8, pg: 8, pe: 0, pp: 0, gf: 23, gc: 4, racha: ["W", "W", "W", "W", "W"] },
-  "Torreón": { pts: 21, pj: 8, pg: 7, pe: 0, pp: 1, gf: 18, gc: 5, racha: ["W", "W", "L", "W", "W"] },
-  "Crisol": { pts: 18, pj: 8, pg: 6, pe: 0, pp: 2, gf: 15, gc: 8, racha: ["L", "W", "W", "L", "W"] },
-};
-
-const mockMatches = [
-  { id: 1, time: "11:00", date: "Hoy", category: "C2C", court: "Cancha 3", teamA: "Mirasoles Col.", teamB: "Buen Ayre Col.", scoreA: null, scoreB: null, status: "por_jugar", events: [] },
-  { id: 2, time: "14:00", date: "Mañana", category: "C1C", court: "Cancha 1", teamA: "Mirasoles Fed.", teamB: "Torreón Col.", scoreA: null, scoreB: null, status: "por_jugar", events: [] }
+const colegios = [
+  "Mirasoles",
+  "Torreón",
+  "Crisol",
+  "El Faro",
+  "Buen Ayre",
+  "Los Cerros",
 ];
 
-const mockResults = [
-  { id: 3, date: "Ayer", category: "C1C", court: "Cancha 1", teamA: "Mirasoles Col.", teamB: "Crisol Col.", scoreA: 1, scoreB: 0, result: "win", status: "finalizado", events: [{ id: 1, minute: 14, type: "goal", player: "Martina López", team: "teamA" }] },
-  { id: 4, date: "20 Abr", category: "C3C", court: "Cancha 2", teamA: "Torreón Fed.", teamB: "El Faro", scoreA: 3, scoreB: 1, result: "win", status: "finalizado", events: [{ id: 3, minute: 8, type: "goal", player: "Laura Viale", team: "teamA" }] },
+const schoolThemes: Record<
+  string,
+  {
+    accent: string;
+    soft: string;
+    text: string;
+  }
+> = {
+  Mirasoles: {
+    accent: "bg-emerald-700",
+    soft: "bg-emerald-50",
+    text: "text-emerald-800",
+  },
+  Torreón: {
+    accent: "bg-sky-700",
+    soft: "bg-sky-50",
+    text: "text-sky-800",
+  },
+  Crisol: {
+    accent: "bg-rose-700",
+    soft: "bg-rose-50",
+    text: "text-rose-800",
+  },
+  "El Faro": {
+    accent: "bg-amber-600",
+    soft: "bg-amber-50",
+    text: "text-amber-800",
+  },
+  "Buen Ayre": {
+    accent: "bg-indigo-700",
+    soft: "bg-indigo-50",
+    text: "text-indigo-800",
+  },
+  "Los Cerros": {
+    accent: "bg-violet-700",
+    soft: "bg-violet-50",
+    text: "text-violet-800",
+  },
+};
+
+const mockSchoolStats = {
+  Mirasoles: {
+    pts: 24,
+    pj: 8,
+    pg: 8,
+    pe: 0,
+    pp: 0,
+    gf: 23,
+    gc: 4,
+    racha: ["G", "G", "G", "G", "G"],
+  },
+  Torreón: {
+    pts: 21,
+    pj: 8,
+    pg: 7,
+    pe: 0,
+    pp: 1,
+    gf: 18,
+    gc: 5,
+    racha: ["G", "G", "P", "G", "G"],
+  },
+  Crisol: {
+    pts: 18,
+    pj: 8,
+    pg: 6,
+    pe: 0,
+    pp: 2,
+    gf: 15,
+    gc: 8,
+    racha: ["P", "G", "G", "P", "G"],
+  },
+};
+
+const mockMatches: Match[] = [
+  {
+    id: 1,
+    time: "11:00",
+    date: "Hoy",
+    category: "C2C",
+    court: "Cancha 3",
+    teamA: "Mirasoles Col.",
+    teamB: "Buen Ayre Col.",
+    scoreA: null,
+    scoreB: null,
+    status: "por_jugar",
+    events: [],
+  },
+  {
+    id: 2,
+    time: "14:00",
+    date: "Mañana",
+    category: "C1C",
+    court: "Cancha 1",
+    teamA: "Mirasoles Fed.",
+    teamB: "Torreón Col.",
+    scoreA: null,
+    scoreB: null,
+    status: "por_jugar",
+    events: [],
+  },
+];
+
+const mockResults: Match[] = [
+  {
+    id: 3,
+    date: "Ayer",
+    category: "C1C",
+    court: "Cancha 1",
+    teamA: "Mirasoles Col.",
+    teamB: "Crisol Col.",
+    scoreA: 1,
+    scoreB: 0,
+    result: "win",
+    status: "finalizado",
+    events: [
+      {
+        id: 1,
+        minute: 14,
+        type: "goal",
+        player: "Martina López",
+        team: "teamA",
+      },
+    ],
+  },
+  {
+    id: 4,
+    date: "20 Abr",
+    category: "C3C",
+    court: "Cancha 2",
+    teamA: "Torreón Fed.",
+    teamB: "El Faro",
+    scoreA: 3,
+    scoreB: 1,
+    result: "win",
+    status: "finalizado",
+    events: [
+      {
+        id: 3,
+        minute: 8,
+        type: "goal",
+        player: "Laura Viale",
+        team: "teamA",
+      },
+    ],
+  },
 ];
 
 export default function MiColegioPage() {
-  const [selectedSchool, setSelectedSchool] = useState<string>("Mirasoles");
-  const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
+  const [selectedSchool, setSelectedSchool] = useState("Mirasoles");
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
-  const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
-  
-  // Obtenemos los colores y datos del colegio seleccionado (si no hay datos exactos, usamos un fallback)
-  const theme = schoolThemes[selectedSchool] || schoolThemes["Mirasoles"];
-  const stats = (mockSchoolStats as any)[selectedSchool] || mockSchoolStats["Mirasoles"];
+  const theme = schoolThemes[selectedSchool] || schoolThemes.Mirasoles;
+  const stats =
+    (mockSchoolStats as Record<string, any>)[selectedSchool] ||
+    mockSchoolStats.Mirasoles;
+
+  const getInitials = (name: string) =>
+    name
+      .replace(".", "")
+      .split(" ")
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
 
   return (
-    <div className="min-h-full flex flex-col w-full bg-[#f8fafc] relative">
-      
-      {/* ───────────────────────────────────────────── */}
-      {/* MODAL DEL PARTIDO (Inmersivo) */}
-      {/* ───────────────────────────────────────────── */}
+    <main className="min-h-screen bg-[#f6f4ee] text-[#151711]">
       <AnimatePresence>
         {selectedMatch && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedMatch(null)} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60]" />
-            <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed bottom-0 left-0 right-0 md:top-1/2 md:bottom-auto md:left-1/2 md:right-auto md:-translate-x-1/2 md:-translate-y-1/2 md:w-[450px] md:rounded-[32px] w-full bg-slate-50 rounded-t-[32px] shadow-2xl z-[70] overflow-hidden flex flex-col max-h-[90vh] md:max-h-[700px]">
-              
-              <div className="bg-white p-4 relative">
-                 <button onClick={() => setSelectedMatch(null)} className="absolute top-4 right-4 z-20 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/60 transition-colors">
-                    <X size={16} strokeWidth={3} />
-                 </button>
-
-                 <HockeyField courtName={selectedMatch.court} />
-
-                 <div className="bg-white rounded-2xl shadow-xl -mt-8 relative z-10 p-5 border border-slate-100 mx-2">
-                    <div className="flex justify-center mb-4">
-                       <span className="bg-slate-900 text-white px-3 py-1 rounded-md text-[10px] font-black tracking-widest">{selectedMatch.category}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex flex-col items-center gap-2 flex-1">
-                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-black border ${selectedMatch.teamA.includes(selectedSchool) ? theme.badge : 'bg-slate-50 text-slate-700 border-slate-200'}`}>{getInitials(selectedMatch.teamA)}</div>
-                         <span className="text-xs font-bold text-slate-800 text-center leading-tight">{selectedMatch.teamA}</span>
-                      </div>
-                      
-                      <div className="flex flex-col items-center justify-center shrink-0 w-24">
-                        {selectedMatch.status === "por_jugar" ? (
-                           <>
-                             <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">{selectedMatch.date}</span>
-                             <span className="text-3xl font-black text-slate-900 tracking-tighter">{selectedMatch.time}</span>
-                           </>
-                        ) : (
-                           <div className="flex items-center gap-3">
-                             <span className="text-4xl font-black text-slate-900">{selectedMatch.scoreA}</span>
-                             <span className="text-xl text-slate-300">-</span>
-                             <span className="text-4xl font-black text-slate-900">{selectedMatch.scoreB}</span>
-                           </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col items-center gap-2 flex-1">
-                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-black border ${selectedMatch.teamB.includes(selectedSchool) ? theme.badge : 'bg-slate-50 text-slate-700 border-slate-200'}`}>{getInitials(selectedMatch.teamB)}</div>
-                         <span className="text-xs font-bold text-slate-800 text-center leading-tight">{selectedMatch.teamB}</span>
-                      </div>
-                    </div>
-                 </div>
-              </div>
-
-              <div className="p-6 overflow-y-auto flex-1">
-                 {selectedMatch.status === "por_jugar" ? (
-                   <div className="flex flex-col items-center justify-center py-8 opacity-60">
-                     <CalendarDays size={48} strokeWidth={1} className="text-slate-400 mb-4" />
-                     <h3 className="text-lg font-black text-slate-800">Próximamente</h3>
-                     <p className="text-xs font-bold text-slate-500 mt-1">Los detalles aparecerán cuando inicie.</p>
-                   </div>
-                 ) : (
-                   <>
-                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Línea de Tiempo</h4>
-                     {selectedMatch.events?.length === 0 ? (
-                       <div className="text-center py-8 text-sm font-bold text-slate-400">Sin eventos registrados.</div>
-                     ) : (
-                       <div className="flex flex-col gap-3">
-                         {selectedMatch.events?.sort((a: any, b: any) => b.minute - a.minute).map((evt: any) => (
-                           <div key={evt.id} className="flex items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
-                             <span className="w-8 text-right text-xs font-black text-slate-400">{evt.minute}'</span>
-                             <div className="flex items-center justify-center w-6 h-6 shrink-0">
-                               {evt.type === 'goal' && <Target size={20} strokeWidth={2.5} className={theme.textLight} />}
-                               {evt.type === 'green_card' && <Square size={16} className="text-green-500 fill-green-500" />}
-                               {evt.type === 'yellow_card' && <Square size={16} className="text-yellow-500 fill-yellow-500" />}
-                             </div>
-                             <div className="flex-1 min-w-0">
-                               <p className="text-sm font-bold text-slate-800 truncate">{evt.player}</p>
-                               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate mt-0.5">
-                                 {evt.type === 'goal' ? 'GOL' : evt.type === 'green_card' ? 'TARJETA VERDE' : 'TARJETA AMARILLA'} 
-                                 <span className="opacity-50 mx-1">•</span> 
-                                 {evt.team === 'teamA' ? selectedMatch.teamA : selectedMatch.teamB}
-                               </p>
-                             </div>
-                           </div>
-                         ))}
-                       </div>
-                     )}
-                   </>
-                 )}
-              </div>
-            </motion.div>
-          </>
+          <MatchModal
+            match={selectedMatch}
+            selectedSchool={selectedSchool}
+            theme={theme}
+            getInitials={getInitials}
+            onClose={() => setSelectedMatch(null)}
+          />
         )}
       </AnimatePresence>
 
+      <section className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 md:px-8 md:pb-12">
+        <header className="mb-8">
+          <div className="mb-6">
+            <p className="mb-3 text-[11px] font-black uppercase tracking-[0.26em] text-[#74786a]">
+              Seguimiento por institución
+            </p>
 
-      {/* ───────────────────────────────────────────── */}
-      {/* HEADER SIN BUSCADOR Y TABS ELEGANTES */}
-      {/* ───────────────────────────────────────────── */}
-      <header className="bg-white/80 backdrop-blur-2xl sticky top-0 z-40 border-b border-slate-200/60 pt-10 pb-5 px-6 shadow-sm">
-         <div className="max-w-7xl mx-auto flex flex-col gap-4">
-           <div>
-             <h1 className="text-3xl font-black tracking-tight text-slate-900">Mi Colegio</h1>
-             <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-widest">Copa 2026</p>
-           </div>
-           
-           {/* Slider de Colegios */}
-           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-              {colegios.map(colegio => (
+            <h1 className="text-[2.65rem] font-black leading-[0.92] tracking-[-0.075em] text-[#151711] md:text-7xl">
+              Mi{" "}
+              <span className="relative inline-block">
+                <span className="relative z-10">Colegio</span>
+                <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" />
+              </span>
+            </h1>
+
+            <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[#62675d]">
+              Resultados, próximos partidos y rendimiento general de cada colegio
+              durante la Copa APDES 2026.
+            </p>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {colegios.map((colegio) => {
+              const isActive = selectedSchool === colegio;
+
+              return (
                 <button
                   key={colegio}
                   onClick={() => setSelectedSchool(colegio)}
-                  className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all ${
-                    selectedSchool === colegio 
-                    ? "bg-slate-900 text-white shadow-md scale-105" 
-                    : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                  className={`shrink-0 rounded-2xl border px-4 py-3 text-sm font-black transition ${
+                    isActive
+                      ? "border-[#151711] bg-[#151711] text-white shadow-sm"
+                      : "border-[#ded9cc] bg-white/70 text-[#62675d] hover:border-[#151711]/25 hover:text-[#151711]"
                   }`}
                 >
                   {colegio}
                 </button>
-              ))}
-            </div>
-         </div>
-      </header>
+              );
+            })}
+          </div>
+        </header>
 
-      {/* ───────────────────────────────────────────── */}
-      {/* ÁREA PRINCIPAL (2 COLUMNAS EN PC) */}
-      {/* ───────────────────────────────────────────── */}
-      <div className="p-4 md:p-8 flex-1 max-w-7xl w-full mx-auto">
         <AnimatePresence mode="wait">
-          {selectedSchool && (
-            <motion.div key={selectedSchool} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row gap-8 items-start">
-              
-              {/* COLUMNA IZQUIERDA: PERFIL DEL COLEGIO (Sticky en PC) */}
-              <div className="w-full lg:w-1/3 xl:w-1/4 flex flex-col gap-6 lg:sticky lg:top-40">
-                <div className={`bg-gradient-to-b ${theme.gradient} rounded-[32px] p-6 shadow-xl relative overflow-hidden border border-white/5 flex flex-col items-center text-center transition-colors duration-500`}>
-                   
-                   {/* Fondo 3D Animado */}
-                   <Floating3DBalls ballColor={theme.ballColor} />
-                   
-                   <div className="relative z-10 w-24 h-24 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-3xl font-black text-white shadow-inner backdrop-blur-md mb-4">
-                     {getInitials(selectedSchool)}
-                   </div>
-                   
-                   <div className="relative z-10 mb-8">
-                     <h2 className="text-3xl font-black text-white tracking-tight">{selectedSchool}</h2>
-                     <ShieldCheck className={`w-5 h-5 ${theme.textLight} mx-auto mt-2`} />
-                   </div>
+          <motion.section
+            key={selectedSchool}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14 }}
+            transition={{ duration: 0.25 }}
+            className="grid gap-8 lg:grid-cols-[340px_1fr]"
+          >
+            <aside className="lg:sticky lg:top-8 lg:self-start">
+              <section className="overflow-hidden rounded-[34px] bg-[#151711] p-5 text-white shadow-[0_24px_70px_rgba(21,23,17,0.22)] md:p-6">
+                <div className="mb-8 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="mb-2 text-[11px] font-black uppercase tracking-[0.24em] text-white/40">
+                      Colegio
+                    </p>
 
-                   {/* Stats Grid Compacto */}
-                   <div className="relative z-10 w-full grid grid-cols-2 gap-3">
-                      <div className="bg-black/30 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                        <span className="block text-3xl font-black text-white leading-none mb-1">{stats.pts}</span>
-                        <span className={`text-[9px] font-bold ${theme.textLight} uppercase tracking-widest`}>Puntos</span>
-                      </div>
-                      <div className="bg-black/30 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                        <span className="block text-3xl font-black text-white leading-none mb-1">{stats.gf}</span>
-                        <span className={`text-[9px] font-bold ${theme.textLight} uppercase tracking-widest`}>Goles</span>
-                      </div>
-                      <div className="col-span-2 bg-black/30 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex flex-col items-center">
-                         <span className={`text-[9px] font-bold ${theme.textLight} uppercase tracking-widest mb-2`}>Racha actual</span>
-                         <div className="flex gap-2">
-                           {stats.racha.map((r: string, i: number) => (
-                             <span key={i} className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black ${r === 'W' ? 'bg-emerald-500 text-emerald-950' : r === 'L' ? 'bg-red-500 text-red-950' : 'bg-slate-400 text-slate-900'}`}>
-                               {r}
-                             </span>
-                           ))}
-                         </div>
-                      </div>
-                   </div>
+                    <h2 className="text-4xl font-black tracking-[-0.07em]">
+                      {selectedSchool}
+                    </h2>
+                  </div>
+
+                  <div
+                    className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-black ${theme.text}`}
+                  >
+                    {getInitials(selectedSchool)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard label="Puntos" value={stats.pts} />
+                  <StatCard label="Goles" value={stats.gf} />
+                  <StatCard label="Jugados" value={stats.pj} />
+                  <StatCard label="Diferencia" value={`+${stats.gf - stats.gc}`} />
+                </div>
+
+                <div className="mt-5 rounded-[24px] border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">
+                      Racha actual
+                    </p>
+
+                    <ShieldCheck className="h-5 w-5 text-[#d7c77a]" />
+                  </div>
+
+                  <div className="flex gap-2">
+                    {stats.racha.map((item: string, index: number) => (
+                      <span
+                        key={`${item}-${index}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs font-black ${
+                          item === "G"
+                            ? "bg-emerald-50 text-emerald-800"
+                            : item === "P"
+                              ? "bg-rose-50 text-rose-800"
+                              : "bg-[#f5edc9] text-[#6f6125]"
+                        }`}
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </aside>
+
+            <section className="space-y-8">
+              <div>
+                <div className="mb-5 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                      Agenda
+                    </p>
+
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">
+                      Próximos partidos
+                    </h2>
+                  </div>
+
+                  <CalendarDays className="h-6 w-6 text-[#74786a]" />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {mockMatches.map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      selectedSchool={selectedSchool}
+                      theme={theme}
+                      getInitials={getInitials}
+                      onClick={() => setSelectedMatch(match)}
+                    />
+                  ))}
                 </div>
               </div>
 
-              {/* COLUMNA DERECHA: PARTIDOS */}
-              <div className="w-full lg:w-2/3 xl:w-3/4 flex flex-col gap-8">
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   {/* PRÓXIMOS */}
-                   <div className="flex flex-col gap-4">
-                      <div className="flex items-center gap-2 px-1 border-b border-slate-200 pb-2">
-                        <Clock className={`w-5 h-5 ${theme.textLight.replace('text-', 'text-').replace('-400', '-600')}`} />
-                        <h3 className="text-lg font-black text-slate-900">Próximos</h3>
-                      </div>
-                      {mockMatches.map((match) => (
-                        <div key={match.id} onClick={() => setSelectedMatch(match)} className="cursor-pointer bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
-                          <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-slate-100 pr-3">
-                             <span className="text-[10px] font-black text-slate-400 uppercase">{match.date}</span>
-                             <span className="text-sm font-black text-slate-900 mt-0.5">{match.time}</span>
-                          </div>
-                          <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                             <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-black tracking-widest w-max">{match.category} • {match.court}</span>
-                             <div className="flex flex-col">
-                               <span className={`text-sm truncate font-bold ${match.teamA.includes(selectedSchool) ? theme.textLight.replace('-400', '-700') : 'text-slate-700'}`}>{match.teamA}</span>
-                               <span className={`text-sm truncate font-bold ${match.teamB.includes(selectedSchool) ? theme.textLight.replace('-400', '-700') : 'text-slate-700'}`}>{match.teamB}</span>
-                             </div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
+              <div>
+                <div className="mb-5 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                      Últimos resultados
+                    </p>
 
-                   {/* RESULTADOS */}
-                   <div className="flex flex-col gap-4">
-                      <div className="flex items-center gap-2 px-1 border-b border-slate-200 pb-2">
-                        <Activity className={`w-5 h-5 ${theme.textLight.replace('text-', 'text-').replace('-400', '-600')}`} />
-                        <h3 className="text-lg font-black text-slate-900">Resultados</h3>
-                      </div>
-                      {mockResults.map((match) => (
-                        <div key={match.id} onClick={() => setSelectedMatch(match)} className="cursor-pointer bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
-                          <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-slate-100 pr-3">
-                             <span className="text-[10px] font-black text-slate-400 uppercase">{match.date}</span>
-                             <span className={`mt-1.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${match.result === 'win' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                               {match.result === 'win' ? 'Ganó' : 'Perdió'}
-                             </span>
-                          </div>
-                          <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                             <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px] font-black tracking-widest w-max">{match.category}</span>
-                             <div className="flex justify-between items-center">
-                               <span className={`text-sm truncate font-bold ${match.teamA.includes(selectedSchool) ? theme.textLight.replace('-400', '-700') : 'text-slate-500'}`}>{match.teamA}</span>
-                               <span className="text-sm font-black text-slate-900 ml-2">{match.scoreA}</span>
-                             </div>
-                             <div className="flex justify-between items-center">
-                               <span className={`text-sm truncate font-bold ${match.teamB.includes(selectedSchool) ? theme.textLight.replace('-400', '-700') : 'text-slate-500'}`}>{match.teamB}</span>
-                               <span className="text-sm font-black text-slate-900 ml-2">{match.scoreB}</span>
-                             </div>
-                          </div>
-                        </div>
-                      ))}
-                   </div>
-                 </div>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">
+                      Historial reciente
+                    </h2>
+                  </div>
 
+                  <Activity className="h-6 w-6 text-[#74786a]" />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {mockResults.map((match) => (
+                    <ResultCard
+                      key={match.id}
+                      match={match}
+                      selectedSchool={selectedSchool}
+                      theme={theme}
+                      getInitials={getInitials}
+                      onClick={() => setSelectedMatch(match)}
+                    />
+                  ))}
+                </div>
               </div>
-            </motion.div>
-          )}
+            </section>
+          </motion.section>
         </AnimatePresence>
+      </section>
+    </main>
+  );
+}
 
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.06] p-4">
+      <p className="text-3xl font-black tracking-[-0.06em] text-white">
+        {value}
+      </p>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function MatchCard({
+  match,
+  selectedSchool,
+  theme,
+  getInitials,
+  onClick,
+}: {
+  match: Match;
+  selectedSchool: string;
+  theme: { accent: string; soft: string; text: string };
+  getInitials: (name: string) => string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="group rounded-[28px] border border-[#ded9cc] bg-white/75 p-4 text-left shadow-sm transition hover:border-[#151711]/25 hover:bg-white"
+    >
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-[#151711]">{match.time}</p>
+          <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+            {match.date}
+          </p>
+        </div>
+
+        <span className="rounded-full bg-[#f6f4ee] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+          {match.category} · {match.court}
+        </span>
       </div>
+
+      <div className="space-y-2">
+        <TeamLine
+          name={match.teamA}
+          initials={getInitials(match.teamA)}
+          active={match.teamA.includes(selectedSchool)}
+          theme={theme}
+        />
+
+        <TeamLine
+          name={match.teamB}
+          initials={getInitials(match.teamB)}
+          active={match.teamB.includes(selectedSchool)}
+          theme={theme}
+        />
+      </div>
+    </button>
+  );
+}
+
+function ResultCard({
+  match,
+  selectedSchool,
+  theme,
+  getInitials,
+  onClick,
+}: {
+  match: Match;
+  selectedSchool: string;
+  theme: { accent: string; soft: string; text: string };
+  getInitials: (name: string) => string;
+  onClick: () => void;
+}) {
+  const isDraw =
+    match.scoreA !== null &&
+    match.scoreB !== null &&
+    match.scoreA === match.scoreB;
+
+  const teamAWins =
+    match.scoreA !== null &&
+    match.scoreB !== null &&
+    match.scoreA > match.scoreB;
+
+  const teamBWins =
+    match.scoreA !== null &&
+    match.scoreB !== null &&
+    match.scoreB > match.scoreA;
+
+  return (
+    <button
+      onClick={onClick}
+      className="group rounded-[28px] border border-[#ded9cc] bg-white/75 p-4 text-left shadow-sm transition hover:border-[#151711]/25 hover:bg-white"
+    >
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-[#151711]">{match.date}</p>
+          <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+            {match.category} · {match.court}
+          </p>
+        </div>
+
+        <span
+          className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+            isDraw
+              ? "bg-[#f5edc9] text-[#6f6125]"
+              : match.result === "win"
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-rose-50 text-rose-800"
+          }`}
+        >
+          {isDraw ? "Empate" : match.result === "win" ? "Ganó" : "Perdió"}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <ResultTeamLine
+          name={match.teamA}
+          initials={getInitials(match.teamA)}
+          score={match.scoreA}
+          active={match.teamA.includes(selectedSchool)}
+          winner={teamAWins}
+          draw={isDraw}
+          theme={theme}
+        />
+
+        <ResultTeamLine
+          name={match.teamB}
+          initials={getInitials(match.teamB)}
+          score={match.scoreB}
+          active={match.teamB.includes(selectedSchool)}
+          winner={teamBWins}
+          draw={isDraw}
+          theme={theme}
+        />
+      </div>
+    </button>
+  );
+}
+
+function TeamLine({
+  name,
+  initials,
+  active,
+  theme,
+}: {
+  name: string;
+  initials: string;
+  active: boolean;
+  theme: { accent: string; soft: string; text: string };
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-2xl border px-3 py-2 ${
+        active ? "border-[#d7c77a]/50 bg-white" : "border-transparent"
+      }`}
+    >
+      <span className={`h-8 w-1.5 rounded-full ${active ? theme.accent : "bg-[#ded9cc]"}`} />
+
+      <span
+        className={`flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-black ${
+          active ? `${theme.soft} ${theme.text}` : "bg-[#f0ede3] text-[#74786a]"
+        }`}
+      >
+        {initials}
+      </span>
+
+      <span
+        className={`truncate text-sm ${
+          active ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
+        }`}
+      >
+        {name}
+      </span>
+    </div>
+  );
+}
+
+function ResultTeamLine({
+  name,
+  initials,
+  score,
+  active,
+  winner,
+  draw,
+  theme,
+}: {
+  name: string;
+  initials: string;
+  score: number | null;
+  active: boolean;
+  winner: boolean;
+  draw: boolean;
+  theme: { accent: string; soft: string; text: string };
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 ${
+        winner
+          ? "border-emerald-700/25 bg-white"
+          : draw
+            ? "border-[#d7c77a]/45 bg-white"
+            : active
+              ? "border-[#d7c77a]/30 bg-white"
+              : "border-transparent"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={`h-8 w-1.5 shrink-0 rounded-full ${
+            winner ? "bg-emerald-700" : draw ? "bg-[#d7c77a]" : active ? theme.accent : "bg-[#ded9cc]"
+          }`}
+        />
+
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+            winner
+              ? "bg-emerald-50 text-emerald-800"
+              : draw
+                ? "bg-[#f5edc9] text-[#6f6125]"
+                : active
+                  ? `${theme.soft} ${theme.text}`
+                  : "bg-[#f0ede3] text-[#74786a]"
+          }`}
+        >
+          {initials}
+        </span>
+
+        <span
+          className={`truncate text-sm ${
+            winner || draw || active
+              ? "font-black text-[#151711]"
+              : "font-bold text-[#62675d]"
+          }`}
+        >
+          {name}
+        </span>
+      </div>
+
+      <span
+        className={`text-xl font-black tracking-[-0.05em] ${
+          winner ? "text-emerald-800" : draw ? "text-[#8a7629]" : "text-[#151711]"
+        }`}
+      >
+        {score ?? "-"}
+      </span>
+    </div>
+  );
+}
+
+function HockeyField({ courtName }: { courtName: string }) {
+  return (
+    <div className="relative h-48 w-full overflow-hidden rounded-[26px] bg-[#29754f] shadow-inner">
+      <div className="absolute inset-0 opacity-20 [background-image:repeating-linear-gradient(0deg,transparent,transparent_22px,rgba(0,0,0,0.16)_22px,rgba(0,0,0,0.16)_44px)]" />
+      <div className="absolute left-0 top-1/2 h-[2px] w-full -translate-y-1/2 bg-white/55" />
+      <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/55" />
+      <div className="absolute left-1/2 top-0 h-16 w-36 -translate-x-1/2 rounded-b-full border-2 border-t-0 border-white/55" />
+      <div className="absolute bottom-0 left-1/2 h-16 w-36 -translate-x-1/2 rounded-t-full border-2 border-b-0 border-white/55" />
+      <div className="absolute inset-4 rounded-[20px] border border-white/30" />
+
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-[#151711]/80 px-4 py-2 shadow-xl backdrop-blur">
+        <MapPin className="h-4 w-4 text-[#d7c77a]" />
+        <span className="text-xs font-black uppercase tracking-[0.2em] text-white">
+          {courtName}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MatchModal({
+  match,
+  selectedSchool,
+  theme,
+  getInitials,
+  onClose,
+}: {
+  match: Match;
+  selectedSchool: string;
+  theme: { accent: string; soft: string; text: string };
+  getInitials: (name: string) => string;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-[80] bg-[#151711]/70 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+
+      <motion.section
+        className="fixed bottom-0 left-0 right-0 z-[90] max-h-[92vh] overflow-hidden rounded-t-[34px] bg-[#f6f4ee] shadow-2xl md:bottom-auto md:left-1/2 md:top-1/2 md:w-[500px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[34px]"
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+        transition={{ type: "spring", damping: 26, stiffness: 220 }}
+      >
+        <div className="relative bg-white p-4">
+          <button
+            onClick={onClose}
+            className="absolute right-7 top-7 z-20 rounded-full bg-[#151711]/80 p-2 text-white backdrop-blur transition hover:bg-[#151711]"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <HockeyField courtName={match.court} />
+
+          <div className="relative z-10 mx-2 -mt-8 rounded-[28px] border border-[#eee9dd] bg-white p-5 shadow-xl">
+            <div className="mb-5 flex justify-center">
+              <span className="rounded-full bg-[#151711] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white">
+                {match.category}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <ModalTeam
+                name={match.teamA}
+                initials={getInitials(match.teamA)}
+                active={match.teamA.includes(selectedSchool)}
+                theme={theme}
+              />
+
+              <div className="text-center">
+                {match.status === "por_jugar" ? (
+                  <>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#74786a]">
+                      {match.date}
+                    </p>
+                    <p className="mt-1 text-4xl font-black tracking-[-0.07em] text-[#151711]">
+                      {match.time}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-5xl font-black tracking-[-0.08em] text-[#151711]">
+                      {match.scoreA}
+                    </span>
+                    <span className="text-2xl font-black text-[#ded9cc]">:</span>
+                    <span className="text-5xl font-black tracking-[-0.08em] text-[#151711]">
+                      {match.scoreB}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <ModalTeam
+                name={match.teamB}
+                initials={getInitials(match.teamB)}
+                active={match.teamB.includes(selectedSchool)}
+                theme={theme}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[390px] overflow-y-auto p-5">
+          {match.status === "por_jugar" ? (
+            <div className="rounded-[24px] border border-dashed border-[#ded9cc] bg-white/70 p-8 text-center">
+              <CalendarDays className="mx-auto mb-3 h-7 w-7 text-[#b7b0a0]" />
+              <p className="text-sm font-black text-[#151711]">
+                Partido programado
+              </p>
+              <p className="mt-1 text-xs font-bold text-[#74786a]">
+                Los eventos aparecerán cuando el partido comience.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mb-4 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                Eventos del partido
+              </p>
+
+              {match.events.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-[#ded9cc] bg-white/70 p-8 text-center">
+                  <Clock className="mx-auto mb-3 h-7 w-7 text-[#b7b0a0]" />
+                  <p className="text-sm font-bold text-[#74786a]">
+                    Sin eventos registrados.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {[...match.events]
+                    .sort((a, b) => b.minute - a.minute)
+                    .map((event) => (
+                      <div
+                        key={event.id}
+                        className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm"
+                      >
+                        <span className="w-9 text-right text-sm font-black text-[#74786a]">
+                          {event.minute}'
+                        </span>
+
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f6f4ee]">
+                          {event.type === "goal" && (
+                            <Target className="h-5 w-5 text-[#151711]" />
+                          )}
+                          {event.type === "green_card" && (
+                            <Square className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+                          )}
+                          {event.type === "yellow_card" && (
+                            <Square className="h-4 w-4 fill-[#d7c77a] text-[#d7c77a]" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-[#151711]">
+                            {event.player}
+                          </p>
+                          <p className="mt-0.5 truncate text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+                            {event.type === "goal"
+                              ? "Gol"
+                              : event.type === "green_card"
+                                ? "Tarjeta verde"
+                                : "Tarjeta amarilla"}{" "}
+                            · {event.team === "teamA" ? match.teamA : match.teamB}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </motion.section>
+    </>
+  );
+}
+
+function ModalTeam({
+  name,
+  initials,
+  active,
+  theme,
+}: {
+  name: string;
+  initials: string;
+  active: boolean;
+  theme: { accent: string; soft: string; text: string };
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 text-center">
+      <div
+        className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-black ${
+          active ? `${theme.soft} ${theme.text}` : "bg-[#f0ede3] text-[#151711]"
+        }`}
+      >
+        {initials}
+      </div>
+
+      <p className="max-w-[105px] text-xs font-black leading-tight text-[#151711]">
+        {name}
+      </p>
     </div>
   );
 }

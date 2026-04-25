@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -164,7 +165,11 @@ const table = [
   { pos: 6, team: "Buen Ayre Col.", pts: 15, j: 8, g: 4, e: 3, p: 1, dif: "+5", qualifies: false },
 ];
 
-const bracket = {
+const bracket: {
+  cuartos: BracketMatchType[];
+  semis: BracketMatchType[];
+  final: BracketMatchType[];
+} = {
   cuartos: [
     {
       id: 101,
@@ -176,7 +181,9 @@ const bracket = {
       court: "Cancha 1",
       time: "16:00",
       category: "C1C",
-      events: [{ id: 1011, minute: 12, type: "goal", player: "Martina López", team: "teamA" }],
+      events: [
+        { id: 1011, minute: 12, type: "goal", player: "Martina López", team: "teamA" },
+      ],
     },
     {
       id: 102,
@@ -188,7 +195,9 @@ const bracket = {
       court: "Cancha 2",
       time: "16:30",
       category: "C1C",
-      events: [{ id: 1021, minute: 20, type: "goal", player: "Camila Ruiz", team: "teamB" }],
+      events: [
+        { id: 1021, minute: 20, type: "goal", player: "Camila Ruiz", team: "teamB" },
+      ],
     },
     {
       id: 103,
@@ -442,6 +451,60 @@ export default function Home() {
   );
 }
 
+function TeamShield({
+  name,
+  size = "md",
+  dark = false,
+}: {
+  name: string;
+  size?: "sm" | "md" | "lg";
+  dark?: boolean;
+}) {
+  const shield = getSchoolShield(name);
+
+  const sizeClass =
+    size === "sm"
+      ? "h-8 w-8"
+      : size === "lg"
+        ? "h-14 w-14 md:h-16 md:w-16"
+        : "h-12 w-12";
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full border ${
+        dark ? "border-white/15 bg-white" : "border-[#ded9cc] bg-white"
+      } ${sizeClass}`}
+    >
+      {shield ? (
+        <Image
+          src={shield}
+          alt={`Escudo de ${name}`}
+          width={80}
+          height={80}
+          className="h-full w-full object-contain p-1.5"
+        />
+      ) : (
+        <span className="text-xs font-black text-[#151711]">
+          {getInitials(name)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function getSchoolShield(name: string) {
+  const normalized = name.toLowerCase();
+
+  if (normalized.includes("mirasoles")) return "/escudos/mirasoles.png";
+  if (normalized.includes("torreón") || normalized.includes("torreon")) return "/escudos/torreon.png";
+  if (normalized.includes("crisol")) return "/escudos/crisol.png";
+  if (normalized.includes("cerros")) return "/escudos/los-cerros.png";
+  if (normalized.includes("buen ayre")) return "/escudos/buen-ayre.png";
+  if (normalized.includes("faro")) return "/escudos/el-faro.png";
+
+  return null;
+}
+
 function TabButton({
   active,
   onClick,
@@ -527,15 +590,15 @@ function HeroTeam({
   return (
     <div className="flex min-w-0 flex-col items-center gap-2 text-center">
       <div
-        className={`flex h-14 w-14 items-center justify-center rounded-full border text-sm font-black md:h-16 md:w-16 ${
+        className={`rounded-full ${
           winner
-            ? "border-emerald-400/60 bg-white text-emerald-800"
+            ? "ring-2 ring-emerald-400/70"
             : draw
-              ? "border-[#d7c77a]/70 bg-white text-[#7a6822]"
-              : "border-white/15 bg-white/10 text-white"
+              ? "ring-2 ring-[#d7c77a]/70"
+              : ""
         }`}
       >
-        {getInitials(name)}
+        <TeamShield name={name} size="lg" dark />
       </div>
 
       <p className="w-full max-w-[96px] truncate text-xs font-black leading-tight text-white md:max-w-[130px] md:text-sm">
@@ -622,17 +685,20 @@ function MiniResultLine({
 }) {
   return (
     <div
-      className={`flex items-center justify-between rounded-xl px-2 py-1.5 ${
+      className={`flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 ${
         winner ? "bg-emerald-50" : draw ? "bg-[#f5edc9]" : "bg-white"
       }`}
     >
-      <p
-        className={`truncate text-sm ${
-          winner || draw ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
-        }`}
-      >
-        {name}
-      </p>
+      <div className="flex min-w-0 items-center gap-2">
+        <TeamShield name={name} size="sm" />
+        <p
+          className={`truncate text-sm ${
+            winner || draw ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
+          }`}
+        >
+          {name}
+        </p>
+      </div>
       <span className="shrink-0 text-sm font-black">{score ?? "-"}</span>
     </div>
   );
@@ -731,17 +797,24 @@ function CompactTeamLine({
   draw: boolean;
 }) {
   return (
-    <p
-      className={`truncate rounded-lg px-2 py-0.5 text-sm ${
+    <div
+      className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-0.5 ${
         winner
-          ? "bg-emerald-50 font-black text-[#151711]"
+          ? "bg-emerald-50"
           : draw
-            ? "bg-[#f5edc9] font-black text-[#151711]"
-            : "font-bold text-[#62675d]"
+            ? "bg-[#f5edc9]"
+            : ""
       }`}
     >
-      {name}
-    </p>
+      <TeamShield name={name} size="sm" />
+      <p
+        className={`truncate text-sm ${
+          winner || draw ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
+        }`}
+      >
+        {name}
+      </p>
+    </div>
   );
 }
 
@@ -773,9 +846,7 @@ function TeamLine({
           }`}
         />
 
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0ede3] text-[10px] font-black text-[#74786a]">
-          {getInitials(name)}
-        </span>
+        <TeamShield name={name} size="sm" />
 
         <span className="min-w-0 truncate text-sm font-black text-[#151711]">
           {name}
@@ -825,6 +896,8 @@ function TableSection() {
                 >
                   {row.pos}
                 </span>
+
+                <TeamShield name={row.team} size="sm" />
 
                 <div className="min-w-0">
                   <p className="truncate text-base font-black text-[#151711]">
@@ -879,6 +952,7 @@ function TableSection() {
                   row.qualifies ? "bg-emerald-700" : "bg-[#ded9cc]"
                 }`}
               />
+              <TeamShield name={row.team} size="sm" />
               <p className="truncate text-sm font-black">{row.team}</p>
             </div>
             <div className="text-center text-lg font-black">{row.pts}</div>
@@ -1016,10 +1090,13 @@ function BracketTeam({
   active: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 last:border-b-0">
-      <span className={`truncate pr-3 text-sm ${active ? "font-black text-white" : "font-bold text-white/50"}`}>
-        {name}
-      </span>
+    <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 last:border-b-0">
+      <div className="flex min-w-0 items-center gap-2">
+        <TeamShield name={name} size="sm" />
+        <span className={`truncate pr-3 text-sm ${active ? "font-black text-white" : "font-bold text-white/50"}`}>
+          {name}
+        </span>
+      </div>
       <span className={`text-lg font-black ${active ? "text-[#d7c77a]" : "text-white/35"}`}>
         {score ?? "-"}
       </span>
@@ -1100,9 +1177,7 @@ function MatchModal({ match, onClose }: { match: Match; onClose: () => void }) {
 function ModalTeam({ name }: { name: string }) {
   return (
     <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ede3] text-sm font-black">
-        {getInitials(name)}
-      </div>
+      <TeamShield name={name} size="md" />
       <p className="w-full max-w-[100px] truncate text-xs font-black">{name}</p>
     </div>
   );

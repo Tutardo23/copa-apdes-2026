@@ -1,48 +1,128 @@
 "use client";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Clock, Trophy, LayoutGrid, ShieldAlert, X, CalendarDays, Target, Square } from "lucide-react";
 
-// ─────────────────────────────────────────────
-// 1. DATOS DE PRUEBA (MOCKS)
-// ─────────────────────────────────────────────
+import { useEffect, useMemo, useRef, useState, type ElementType } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import gsap from "gsap";
+import {
+  CalendarDays,
+  Clock,
+  LayoutGrid,
+  MapPin,
+  Square,
+  Target,
+  Trophy,
+  X,
+} from "lucide-react";
 
-const mockMatches = [
-  { 
-    id: 1, time: "8:30", category: "C1C", court: "Cancha 1", teamA: "Mirasoles Col.", teamB: "Crisol Col.", scoreA: 1, scoreB: 0, status: "finalizado",
+type MatchStatus = "finalizado" | "en_curso" | "por_jugar";
+type EventType = "goal" | "green_card" | "yellow_card";
+type TabType = "fixture" | "tabla" | "llaves";
+
+type MatchEvent = {
+  id: number;
+  minute: number;
+  type: EventType;
+  player: string;
+  team: "teamA" | "teamB";
+};
+
+type Match = {
+  id: number;
+  time: string;
+  category: string;
+  court: string;
+  teamA: string;
+  teamB: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  status: MatchStatus;
+  events: MatchEvent[];
+  featured?: boolean;
+};
+
+const mockMatches: Match[] = [
+  {
+    id: 1,
+    time: "8:30",
+    category: "C1C",
+    court: "Cancha 1",
+    teamA: "Mirasoles Col.",
+    teamB: "Crisol Col.",
+    scoreA: 1,
+    scoreB: 0,
+    status: "finalizado",
+    featured: true,
     events: [
       { id: 1, minute: 14, type: "goal", player: "Martina López", team: "teamA" },
-      { id: 2, minute: 32, type: "green_card", player: "Sofía Pérez", team: "teamB" }
-    ]
+      { id: 2, minute: 32, type: "green_card", player: "Sofía Pérez", team: "teamB" },
+    ],
   },
-  { 
-    id: 2, time: "9:00", category: "C3C", court: "Cancha 2", teamA: "Mirasoles Fed.", teamB: "Crisol Fed.", scoreA: 3, scoreB: 2, status: "finalizado",
+  {
+    id: 2,
+    time: "9:00",
+    category: "C3C",
+    court: "Cancha 2",
+    teamA: "Mirasoles Fed.",
+    teamB: "Crisol Fed.",
+    scoreA: 3,
+    scoreB: 2,
+    status: "finalizado",
+    featured: true,
     events: [
       { id: 3, minute: 8, type: "goal", player: "Laura Viale", team: "teamA" },
       { id: 4, minute: 22, type: "goal", player: "Camila Ruiz", team: "teamB" },
       { id: 5, minute: 40, type: "yellow_card", player: "Julieta Sosa", team: "teamA" },
-    ]
+    ],
   },
-  { 
-    id: 3, time: "10:00", category: "C1C", court: "Cancha 1", teamA: "Torreón Col.", teamB: "Los Cerros Col.", scoreA: 1, scoreB: 1, status: "en_curso",
+  {
+    id: 3,
+    time: "10:00",
+    category: "C1C",
+    court: "Cancha 1",
+    teamA: "Torreón Col.",
+    teamB: "Los Cerros Col.",
+    scoreA: 1,
+    scoreB: 1,
+    status: "en_curso",
+    featured: true,
     events: [
       { id: 6, minute: 5, type: "goal", player: "Ana Gómez", team: "teamA" },
-      { id: 7, minute: 18, type: "goal", player: "Lucía Díaz", team: "teamB" }
-    ]
+      { id: 7, minute: 18, type: "goal", player: "Lucía Díaz", team: "teamB" },
+    ],
   },
-  { id: 4, time: "11:00", category: "C2C", court: "Cancha 3", teamA: "Mirasoles Col.", teamB: "Buen Ayre Col.", scoreA: null, scoreB: null, status: "por_jugar", events: [] },
-  { id: 5, time: "12:30", category: "C3C", court: "Cancha 1", teamA: "El Faro", teamB: "Torreón Fed.", scoreA: null, scoreB: null, status: "por_jugar", events: [] }
+  {
+    id: 4,
+    time: "11:00",
+    category: "C2C",
+    court: "Cancha 3",
+    teamA: "Mirasoles Col.",
+    teamB: "Buen Ayre Col.",
+    scoreA: null,
+    scoreB: null,
+    status: "por_jugar",
+    events: [],
+  },
+  {
+    id: 5,
+    time: "12:30",
+    category: "C3C",
+    court: "Cancha 1",
+    teamA: "El Faro",
+    teamB: "Torreón Fed.",
+    scoreA: null,
+    scoreB: null,
+    status: "por_jugar",
+    events: [],
+  },
 ];
 
 const mockTable = [
-  { pos: 1, team: "Mirasoles Col.", pts: 24, j: 8, g: 8, e: 0, p: 0, dif: "+19" },
-  { pos: 2, team: "Torreón Col.", pts: 21, j: 8, g: 7, e: 0, p: 1, dif: "+14" },
-  { pos: 3, team: "Los Cerros Col.", pts: 18, j: 8, g: 6, e: 0, p: 2, dif: "+12" },
-  { pos: 4, team: "El Faro", pts: 17, j: 8, g: 5, e: 2, p: 1, dif: "+10" },
-  { pos: 5, team: "Crisol Fed.", pts: 16, j: 8, g: 5, e: 1, p: 2, dif: "+8" },
-  { pos: 6, team: "Buen Ayre Col.", pts: 15, j: 8, g: 4, e: 3, p: 1, dif: "+5" },
-  { pos: 7, team: "Mirasoles Fed.", pts: 10, j: 8, g: 3, e: 1, p: 4, dif: "-2" },
-  { pos: 8, team: "Torreón Fed.", pts: 8, j: 8, g: 2, e: 2, p: 4, dif: "-5" },
+  { pos: 1, team: "Mirasoles Col.", pts: 24, j: 8, g: 8, e: 0, p: 0, dif: "+19", qualifies: true },
+  { pos: 2, team: "Torreón Col.", pts: 21, j: 8, g: 7, e: 0, p: 1, dif: "+14", qualifies: true },
+  { pos: 3, team: "Los Cerros Col.", pts: 18, j: 8, g: 6, e: 0, p: 2, dif: "+12", qualifies: true },
+  { pos: 4, team: "El Faro", pts: 17, j: 8, g: 5, e: 2, p: 1, dif: "+10", qualifies: true },
+  { pos: 5, team: "Crisol Fed.", pts: 16, j: 8, g: 5, e: 1, p: 2, dif: "+8", qualifies: false },
+  { pos: 6, team: "Buen Ayre Col.", pts: 15, j: 8, g: 4, e: 3, p: 1, dif: "+5", qualifies: false },
 ];
 
 const mockBracket = {
@@ -57,381 +137,980 @@ const mockBracket = {
     { id: 202, teamA: "Torreón Col.", scoreA: null, teamB: "Buen Ayre Col.", scoreB: null },
   ],
   final: [
-    { id: 301, teamA: "Mirasoles Col.", scoreA: null, teamB: "TBD", scoreB: null },
-  ]
+    { id: 301, teamA: "Ganador SF1", scoreA: null, teamB: "Ganador SF2", scoreB: null },
+  ],
 };
 
 const days = [
-  { id: "jueves", label: "Jue", date: "23 Abr" },
-  { id: "viernes", label: "Vie", date: "24 Abr" },
-  { id: "sabado", label: "Sáb", date: "25 Abr" },
+  { id: "jueves", label: "Jueves", date: "23 Abr" },
+  { id: "viernes", label: "Viernes", date: "24 Abr" },
+  { id: "sabado", label: "Sábado", date: "25 Abr" },
 ];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"fixture" | "tabla" | "llaves">("fixture");
-  const [activeDay, setActiveDay] = useState("viernes");
-  const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
+  const pageRef = useRef<HTMLElement | null>(null);
 
-  const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
-  const featuredMatch = mockMatches.find(m => m.status === "en_curso") || mockMatches.find(m => m.status === "por_jugar") || mockMatches[0];
+  const [activeTab, setActiveTab] = useState<TabType>("fixture");
+  const [activeDay, setActiveDay] = useState("viernes");
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+
+  const featuredMatch = useMemo(() => {
+    return mockMatches.find((match) => match.status === "en_curso") || mockMatches[0];
+  }, []);
+
+  const featuredMatches = mockMatches.filter((match) => match.featured);
+
+  const getInitials = (name: string) =>
+    name
+      .replace(".", "")
+      .split(" ")
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from(".gsap-title", {
+        y: 28,
+        opacity: 0,
+        duration: 0.75,
+        ease: "power3.out",
+        clearProps: "all",
+      });
+
+      gsap.from(".gsap-soft", {
+        y: 18,
+        opacity: 0,
+        duration: 0.65,
+        stagger: 0.06,
+        delay: 0.12,
+        ease: "power3.out",
+        clearProps: "all",
+      });
+    }, pageRef);
+
+    return () => ctx.revert();
+  }, []);
 
   return (
-    <div className="min-h-full flex flex-col w-full bg-[#f8fafc] relative">
-      
-      {/* ───────────────────────────────────────────── */}
-      {/* MODAL DETALLES DEL PARTIDO (PÚBLICO)          */}
-      {/* ───────────────────────────────────────────── */}
+    <main ref={pageRef} className="min-h-screen bg-[#f6f4ee] text-[#151711]">
       <AnimatePresence>
         {selectedMatch && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setSelectedMatch(null)}
-              className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60]"
-            />
-            
-            <motion.div 
-              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 md:top-1/2 md:bottom-auto md:left-1/2 md:right-auto md:-translate-x-1/2 md:-translate-y-1/2 md:w-[450px] md:rounded-[32px] w-full bg-white rounded-t-[32px] shadow-2xl z-[70] overflow-hidden flex flex-col max-h-[90vh] md:max-h-[650px]"
-            >
-              <div className="w-full flex justify-center pt-3 pb-1 md:hidden">
-                 <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
-              </div>
-
-              {/* Header Modal */}
-              <div className="p-6 pb-5 border-b border-slate-100 flex flex-col relative bg-white">
-                 <button onClick={() => setSelectedMatch(null)} className="absolute top-5 right-5 p-2 bg-slate-50 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                    <X size={18} strokeWidth={2.5} />
-                 </button>
-
-                 <div className="flex items-center gap-2 mb-6">
-                   <span className="bg-slate-900 text-white px-2.5 py-1 rounded-md text-[10px] font-black tracking-widest">{selectedMatch.category}</span>
-                   {selectedMatch.status === 'en_curso' && <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">EN JUEGO</span>}
-                   {selectedMatch.status === 'finalizado' && <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">FINAL</span>}
-                 </div>
-
-                 {/* Marcador */}
-                 <div className="flex items-center justify-between gap-4 px-2">
-                   <div className="flex flex-col items-center gap-2 flex-1">
-                      <div className="w-14 h-14 rounded-full bg-slate-50 text-slate-700 flex items-center justify-center text-lg font-black border border-slate-200 shadow-sm">{getInitials(selectedMatch.teamA)}</div>
-                      <span className="text-xs font-bold text-slate-800 text-center leading-tight">{selectedMatch.teamA}</span>
-                   </div>
-                   
-                   <div className="flex items-center gap-3 shrink-0 pb-4">
-                      <span className="text-5xl font-black text-slate-900 tracking-tighter">{selectedMatch.scoreA ?? '-'}</span>
-                      <span className="text-2xl font-black text-slate-200">-</span>
-                      <span className="text-5xl font-black text-slate-900 tracking-tighter">{selectedMatch.scoreB ?? '-'}</span>
-                   </div>
-
-                   <div className="flex flex-col items-center gap-2 flex-1">
-                      <div className="w-14 h-14 rounded-full bg-slate-50 text-slate-700 flex items-center justify-center text-lg font-black border border-slate-200 shadow-sm">{getInitials(selectedMatch.teamB)}</div>
-                      <span className="text-xs font-bold text-slate-800 text-center leading-tight">{selectedMatch.teamB}</span>
-                   </div>
-                 </div>
-              </div>
-
-              {/* Minuto a Minuto Límpio y Profesional */}
-              <div className="overflow-y-auto flex-1 bg-slate-50/50 p-6">
-                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Eventos del Partido</h4>
-                 
-                 {selectedMatch.events?.length === 0 ? (
-                   <div className="text-center py-10 flex flex-col items-center justify-center gap-2">
-                     <Clock size={24} className="text-slate-300" />
-                     <span className="text-sm font-bold text-slate-400">Sin eventos registrados</span>
-                   </div>
-                 ) : (
-                   <div className="flex flex-col">
-                     {selectedMatch.events?.sort((a: any, b: any) => b.minute - a.minute).map((evt: any) => (
-                       <div key={evt.id} className="flex items-center gap-4 py-3 border-b border-slate-100 last:border-0">
-                         <span className="w-8 text-right text-xs font-black text-slate-400">{evt.minute}'</span>
-                         
-                         <div className="flex items-center justify-center w-6 h-6 shrink-0">
-                           {evt.type === 'goal' && <Target size={18} strokeWidth={3} className="text-emerald-600" />}
-                           {evt.type === 'green_card' && <Square size={16} className="text-green-500 fill-green-500" />}
-                           {evt.type === 'yellow_card' && <Square size={16} className="text-yellow-500 fill-yellow-500" />}
-                         </div>
-
-                         <div className="flex-1 min-w-0">
-                           <p className="text-sm font-bold text-slate-800 truncate">{evt.player}</p>
-                           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate mt-0.5">
-                             {evt.type === 'goal' ? 'GOL' : evt.type === 'green_card' ? 'TARJETA VERDE' : 'TARJETA AMARILLA'} 
-                             <span className="opacity-50 mx-1">•</span> 
-                             {evt.team === 'teamA' ? selectedMatch.teamA : selectedMatch.teamB}
-                           </p>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-              </div>
-            </motion.div>
-          </>
+          <MatchModal
+            match={selectedMatch}
+            onClose={() => setSelectedMatch(null)}
+            getInitials={getInitials}
+          />
         )}
       </AnimatePresence>
 
-      {/* ───────────────────────────────────────────── */}
-      {/* HEADER & TABS DE NAVEGACIÓN PREMIUM          */}
-      {/* ───────────────────────────────────────────── */}
-      <header className="bg-white/80 backdrop-blur-2xl sticky top-0 z-40 border-b border-slate-200/60 pt-8 pb-4 px-4 md:px-8 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-             <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-                Copa APDES <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-md uppercase tracking-widest font-bold translate-y-[-2px]">Live</span>
-             </h1>
-             <p className="text-sm font-semibold text-slate-500 mt-1">Temporada Regular 2026</p>
-          </div>
+      <section className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 md:px-8 md:pb-12">
+        <header className="mb-8">
+          <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="gsap-title max-w-2xl text-[2.65rem] font-black leading-[0.92] tracking-[-0.075em] text-[#151711] md:text-7xl">
+                Copa{" "}
+                <span className="relative inline-block">
+                  <span className="relative z-10">APDES</span>
+                  <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" />
+                </span>{" "}
+                2026
+              </h1>
 
-          <div className="flex items-center p-1 bg-slate-100/80 rounded-2xl border border-slate-200/50 self-start md:self-auto w-full md:w-auto">
-            {[
-              { id: "fixture", label: "Fixture", icon: CalendarDays },
-              { id: "tabla", label: "Posiciones", icon: Trophy },
-              { id: "llaves", label: "Fase Final", icon: LayoutGrid }
-            ].map((tab) => {
-              const isActive = activeTab === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`relative flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
-                    isActive ? "text-emerald-900" : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div layoutId="header-tab" className="absolute inset-0 bg-white rounded-xl shadow-sm border border-slate-200/50" transition={{ type: "spring", stiffness: 400, damping: 30 }} />
-                  )}
-                  <Icon className="w-4 h-4 relative z-10" />
-                  <span className="relative z-10">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </header>
+              <p className="gsap-soft mt-4 max-w-xl text-base font-medium leading-7 text-[#62675d]">
+                Fixture, resultados y posiciones para seguir la jornada sin perderse entre datos.
+              </p>
+            </div>
 
-      {/* ───────────────────────────────────────────── */}
-      {/* ÁREA DE CONTENIDO DINÁMICA                   */}
-      {/* ───────────────────────────────────────────── */}
-      <div className="p-4 md:p-8 flex-1 overflow-x-hidden">
+            <div className="gsap-soft flex rounded-full border border-[#ded9cc] bg-white/70 p-1 shadow-sm">
+              <TabButton active={activeTab === "fixture"} onClick={() => setActiveTab("fixture")} icon={CalendarDays} label="Fixture" />
+              <TabButton active={activeTab === "tabla"} onClick={() => setActiveTab("tabla")} icon={Trophy} label="Tabla" />
+              <TabButton active={activeTab === "llaves"} onClick={() => setActiveTab("llaves")} icon={LayoutGrid} label="Llaves" />
+            </div>
+          </div>
+        </header>
+
         <AnimatePresence mode="wait">
-          
-          {/* ========================================================= */}
-          {/* VISTA: FIXTURE */}
-          {/* ========================================================= */}
           {activeTab === "fixture" && (
-            <motion.div key="fixture" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="flex flex-col gap-6">
-              
-              <div 
+            <motion.section
+              key="fixture"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-8"
+            >
+              <FeaturedMatch
+                match={featuredMatch}
                 onClick={() => setSelectedMatch(featuredMatch)}
-                className="cursor-pointer bg-gradient-to-br from-emerald-900 via-[#0A2E1C] to-emerald-950 rounded-[28px] p-6 shadow-2xl relative overflow-hidden border border-emerald-800/50 hover:scale-[1.02] transition-transform"
-              >
-                 <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/30 blur-[60px] rounded-full pointer-events-none" />
-                 <div className="relative z-10">
-                   <div className="flex justify-between items-center mb-6">
-                     <span className="bg-white/10 border border-white/20 text-white backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-black tracking-widest flex items-center gap-1.5">
-                       {featuredMatch.status === "en_curso" ? <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"/> EN VIVO</> : "DESTACADO"}
-                     </span>
-                     <span className="text-emerald-200 text-xs font-bold uppercase tracking-widest">{featuredMatch.category} • {featuredMatch.court}</span>
-                   </div>
-                   <div className="flex items-center justify-between gap-4">
-                     <div className="flex flex-col items-center gap-2 flex-1">
-                        <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xl font-black text-white shadow-inner backdrop-blur-sm">{getInitials(featuredMatch.teamA)}</div>
-                        <span className="text-white font-bold text-sm text-center line-clamp-1">{featuredMatch.teamA}</span>
-                     </div>
-                     <div className="flex flex-col items-center justify-center shrink-0 w-24">
-                        {featuredMatch.status === "por_jugar" ? (
-                           <span className="text-3xl font-black text-white tracking-tighter">{featuredMatch.time}</span>
-                        ) : (
-                           <div className="flex items-center gap-3">
-                             <span className="text-4xl font-black text-white">{featuredMatch.scoreA}</span>
-                             <span className="text-emerald-400/50 font-black">-</span>
-                             <span className="text-4xl font-black text-white">{featuredMatch.scoreB}</span>
-                           </div>
-                        )}
-                     </div>
-                     <div className="flex flex-col items-center gap-2 flex-1">
-                        <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-xl font-black text-white shadow-inner backdrop-blur-sm">{getInitials(featuredMatch.teamB)}</div>
-                        <span className="text-white font-bold text-sm text-center line-clamp-1">{featuredMatch.teamB}</span>
-                     </div>
-                   </div>
-                 </div>
-              </div>
+                getInitials={getInitials}
+              />
 
-              {/* Selector Días */}
-              <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
-                {days.map((day) => (
-                  <button key={day.id} onClick={() => setActiveDay(day.id)} className={`relative flex flex-col items-center justify-center shrink-0 w-20 h-16 rounded-2xl transition-all border ${activeDay === day.id ? "border-emerald-600 text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                    {activeDay === day.id && <motion.div layoutId="active-day" className="absolute inset-0 bg-emerald-600 rounded-2xl" />}
-                    <span className="relative z-10 text-[10px] font-black uppercase tracking-widest opacity-80">{day.label}</span>
-                    <span className="relative z-10 text-sm font-bold mt-0.5">{day.date.split(" ")[0]}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Grid Partidos */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {mockMatches.filter(m => m.id !== featuredMatch.id).map((match) => (
-                  <div key={match.id} onClick={() => setSelectedMatch(match)} className="cursor-pointer bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all hover:shadow-md hover:border-emerald-100 hover:-translate-y-1">
-                    <div className="flex justify-between items-center mb-4 pl-2">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-black tracking-widest">{match.category}</span>
-                        <div className="flex items-center gap-1 text-slate-400 text-xs font-bold"><MapPin className="w-3.5 h-3.5" /> {match.court}</div>
-                      </div>
-                      {match.status === 'finalizado' && <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">FINAL</span>}
-                      {match.status === 'por_jugar' && <div className="flex items-center gap-1 text-slate-600 bg-slate-50 px-2 py-1 rounded-lg text-[10px] font-black"><Clock className="w-3 h-3" /> {match.time}</div>}
-                    </div>
-
-                    <div className="flex flex-col gap-3 pl-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[9px] font-black text-emerald-700">{getInitials(match.teamA)}</div>
-                          <span className={`text-sm font-bold ${match.scoreA !== null && match.scoreA > (match.scoreB || 0) ? 'text-slate-900' : 'text-slate-600'}`}>{match.teamA}</span>
-                        </div>
-                        <span className={`text-xl font-black w-8 text-center ${match.scoreA !== null ? 'text-slate-900' : 'text-slate-300'}`}>{match.scoreA !== null ? match.scoreA : '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[9px] font-black text-emerald-700">{getInitials(match.teamB)}</div>
-                          <span className={`text-sm font-bold ${match.scoreB !== null && match.scoreB > (match.scoreA || 0) ? 'text-slate-900' : 'text-slate-600'}`}>{match.teamB}</span>
-                        </div>
-                        <span className={`text-xl font-black w-8 text-center ${match.scoreB !== null ? 'text-slate-900' : 'text-slate-300'}`}>{match.scoreB !== null ? match.scoreB : '-'}</span>
-                      </div>
-                    </div>
+              <section className="grid gap-8 lg:grid-cols-[1fr_340px]">
+                <div>
+                  <div className="mb-5">
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                      Jornada
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.04em]">
+                      Partidos del día
+                    </h2>
                   </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
 
-          {/* ========================================================= */}
-          {/* VISTA: TABLA */}
-          {/* ========================================================= */}
-          {activeTab === "tabla" && (
-            <motion.div key="tabla" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-4">
-              <div className="flex items-center gap-2 mb-2 px-2">
-                 <ShieldAlert className="w-5 h-5 text-emerald-600" />
-                 <h2 className="text-lg font-black text-slate-900">Clasificación General</h2>
-              </div>
-              <div className="bg-white border border-slate-200/60 rounded-[28px] overflow-hidden shadow-sm">
-                <div className="overflow-x-auto no-scrollbar">
-                  <table className="w-full min-w-[500px] text-left border-collapse">
-                    <thead className="bg-slate-50/80 border-b border-slate-200/60">
-                      <tr>
-                        <th className="py-4 pl-6 pr-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12">#</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Equipo</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">PTS</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hidden sm:table-cell">J</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hidden sm:table-cell">G</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hidden sm:table-cell">E</th>
-                        <th className="py-4 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hidden sm:table-cell">P</th>
-                        <th className="py-4 pr-6 pl-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">+/-</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {mockTable.map((row) => {
-                        const isTop = row.pos <= 4; 
+                  <div className="mb-6 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {days.map((day) => (
+                      <button
+                        key={day.id}
+                        onClick={() => setActiveDay(day.id)}
+                        className={`min-w-[122px] rounded-2xl border px-4 py-3 text-left transition ${
+                          activeDay === day.id
+                            ? "border-[#151711] bg-[#151711] text-white"
+                            : "border-[#ded9cc] bg-white/60 text-[#62675d]"
+                        }`}
+                      >
+                        <p className="text-[11px] font-black uppercase tracking-[0.18em] opacity-70">
+                          {day.label}
+                        </p>
+                        <p className="mt-1 text-base font-black">{day.date}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {mockMatches.map((match) => (
+                      <MatchRow
+                        key={match.id}
+                        match={match}
+                        onClick={() => setSelectedMatch(match)}
+                        getInitials={getInitials}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <aside>
+                  <section className="rounded-[30px] border border-[#ded9cc] bg-white/70 p-5 shadow-sm">
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                      Partidos destacados
+                    </p>
+
+                    <h3 className="mt-1 text-2xl font-black tracking-[-0.045em]">
+                      Para seguir de cerca
+                    </h3>
+
+                    <div className="mt-5 space-y-3">
+                      {featuredMatches.map((match) => {
+                        const isDraw =
+                          match.scoreA !== null &&
+                          match.scoreB !== null &&
+                          match.scoreA === match.scoreB;
+
                         return (
-                          <tr key={row.team} className="hover:bg-slate-50/50 transition-colors group">
-                            <td className="py-3 pl-6 pr-2 relative">
-                              {isTop && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500 rounded-r-full" />}
-                              <span className={`text-xs font-bold ${isTop ? "text-emerald-600" : "text-slate-400"}`}>{row.pos}</span>
-                            </td>
-                            <td className="py-3 px-2">
-                               <div className="flex items-center gap-3">
-                                 <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500 border border-slate-200">{getInitials(row.team)}</div>
-                                 <span className="text-sm font-bold text-slate-800">{row.team}</span>
-                               </div>
-                            </td>
-                            <td className="py-3 px-2 text-center text-sm font-black text-slate-900 bg-slate-50/50">{row.pts}</td>
-                            <td className="py-3 px-2 text-center text-xs font-semibold text-slate-500 hidden sm:table-cell">{row.j}</td>
-                            <td className="py-3 px-2 text-center text-xs font-semibold text-slate-500 hidden sm:table-cell">{row.g}</td>
-                            <td className="py-3 px-2 text-center text-xs font-semibold text-slate-500 hidden sm:table-cell">{row.e}</td>
-                            <td className="py-3 px-2 text-center text-xs font-semibold text-slate-500 hidden sm:table-cell">{row.p}</td>
-                            <td className="py-3 pr-6 pl-2 text-center text-xs font-bold text-slate-600">{row.dif}</td>
-                          </tr>
+                          <button
+                            key={match.id}
+                            onClick={() => setSelectedMatch(match)}
+                            className="w-full rounded-2xl bg-[#f6f4ee] p-4 text-left transition hover:bg-[#efeadf]"
+                          >
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <span className="text-sm font-black">{match.time}</span>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] ${
+                                  match.status === "en_curso"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-white text-[#74786a]"
+                                }`}
+                              >
+                                {match.status === "en_curso"
+                                  ? "En juego"
+                                  : match.status === "finalizado"
+                                    ? "Final"
+                                    : "Pendiente"}
+                              </span>
+                            </div>
+
+                            <FeaturedMiniTeam
+                              name={match.teamA}
+                              score={match.scoreA}
+                              active={
+                                match.scoreA !== null &&
+                                match.scoreB !== null &&
+                                match.scoreA > match.scoreB
+                              }
+                              draw={isDraw}
+                            />
+
+                            <FeaturedMiniTeam
+                              name={match.teamB}
+                              score={match.scoreB}
+                              active={
+                                match.scoreA !== null &&
+                                match.scoreB !== null &&
+                                match.scoreB > match.scoreA
+                              }
+                              draw={isDraw}
+                            />
+
+                            <p className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+                              {match.category} · {match.court}
+                            </p>
+                          </button>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="bg-slate-50 p-4 border-t border-slate-200/60 flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-xs font-bold text-slate-500">Clasificación a Fase Final</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+                    </div>
+                  </section>
+                </aside>
+              </section>
+            </motion.section>
           )}
 
-          {/* ========================================================= */}
-          {/* VISTA: LLAVES */}
-          {/* ========================================================= */}
-          {activeTab === "llaves" && (
-            <motion.div key="llaves" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4">
-              <div className="flex items-center gap-2 mb-2 px-2">
-                 <Trophy className="w-5 h-5 text-amber-500" />
-                 <h2 className="text-lg font-black text-slate-900">Camino a la Final</h2>
+          {activeTab === "tabla" && (
+            <motion.section
+              key="tabla"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14 }}
+              transition={{ duration: 0.25 }}
+              className="rounded-[34px] border border-[#ded9cc] bg-white/80 p-5 shadow-sm md:p-8"
+            >
+              <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                    Clasificación
+                  </p>
+
+                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em] text-[#151711] md:text-4xl">
+                    Tabla general
+                  </h2>
+                </div>
+
+                <div className="flex items-center gap-2 rounded-full bg-[#f6f4ee] px-4 py-2 text-xs font-bold text-[#74786a]">
+                  <span className="h-3 w-3 rounded-full bg-emerald-600" />
+                  Clasifica a fase final
+                </div>
               </div>
-              <div className="overflow-x-auto no-scrollbar bg-[#0A1F13] rounded-[32px] p-8 shadow-2xl relative border border-[#123620]">
-                <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(#ffffff 1px, transparent 1px)", backgroundSize: "20px 20px" }}/>
-                <div className="flex gap-8 min-w-max relative z-10">
-                  <div className="flex flex-col justify-around gap-6 w-64">
-                    <h3 className="text-center text-[10px] font-black text-emerald-500/80 uppercase tracking-widest mb-2">Cuartos de Final</h3>
-                    {mockBracket.cuartos.map(match => (
-                      <div key={match.id} className="bg-[#13321F] border border-[#1E4D2F] rounded-2xl overflow-hidden shadow-lg flex flex-col">
-                        <div className="flex justify-between items-center p-3 border-b border-[#1E4D2F]">
-                          <span className="text-xs font-bold text-white truncate pr-2">{match.teamA}</span>
-                          <span className={`text-sm font-black w-6 text-center rounded bg-[#0A1F13] ${match.scoreA! > match.scoreB! ? "text-[#A3E635]" : "text-emerald-700"}`}>{match.scoreA}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3">
-                          <span className="text-xs font-bold text-white truncate pr-2">{match.teamB}</span>
-                          <span className={`text-sm font-black w-6 text-center rounded bg-[#0A1F13] ${match.scoreB! > match.scoreA! ? "text-[#A3E635]" : "text-emerald-700"}`}>{match.scoreB}</span>
-                        </div>
-                        {match.penalties && (
-                          <div className="bg-[#0A1F13] py-1 px-3 text-[9px] font-black text-emerald-500/80 text-right uppercase tracking-widest">
-                            Pen: {match.penalties}
-                          </div>
-                        )}
+
+              <div className="overflow-hidden rounded-[24px] border border-[#e6e0d3] bg-[#fbfaf6] md:rounded-[28px]">
+                <div className="grid grid-cols-[38px_1fr_46px_38px_38px_46px] border-b border-[#e6e0d3] px-3 py-3 text-[9px] font-black uppercase tracking-[0.12em] text-[#74786a] md:grid-cols-[72px_1fr_80px_64px_64px_64px_64px_80px] md:px-5 md:py-4 md:text-[11px]">
+                  <div>#</div>
+                  <div>Equipo</div>
+                  <div className="text-center">PTS</div>
+                  <div className="text-center">J</div>
+                  <div className="text-center">G</div>
+                  <div className="text-center">DIF</div>
+
+                  <div className="hidden text-center md:block">E</div>
+                  <div className="hidden text-center md:block">P</div>
+                </div>
+
+                {mockTable.map((row) => (
+                  <div
+                    key={row.team}
+                    className="grid grid-cols-[38px_1fr_46px_38px_38px_46px] items-center border-b border-[#eee9dd] px-3 py-3 last:border-b-0 hover:bg-white md:grid-cols-[72px_1fr_80px_64px_64px_64px_64px_80px] md:px-5 md:py-4"
+                  >
+                    <div className="text-xs font-black text-[#74786a] md:text-sm">
+                      {row.pos}
+                    </div>
+
+                    <div className="flex min-w-0 items-center gap-2 md:gap-4">
+                      <span
+                        className={`h-9 w-1.5 shrink-0 rounded-full md:h-10 ${
+                          row.qualifies ? "bg-emerald-600" : "bg-[#ded9cc]"
+                        }`}
+                      />
+
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-[#151711] md:text-sm">
+                          {row.team}
+                        </p>
+                        <p className="hidden text-[11px] font-bold text-[#74786a] md:block">
+                          {row.qualifies ? "Zona de clasificación" : "Fuera de clasificación"}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col justify-around gap-12 w-64">
-                    <h3 className="text-center text-[10px] font-black text-emerald-500/80 uppercase tracking-widest mb-2">Semifinales</h3>
-                    {mockBracket.semis.map(match => (
-                      <div key={match.id} className="bg-[#13321F] border border-[#1E4D2F] rounded-2xl overflow-hidden shadow-lg flex flex-col">
-                        <div className="flex justify-between items-center p-3 border-b border-[#1E4D2F]">
-                          <span className="text-xs font-bold text-white truncate pr-2">{match.teamA}</span>
-                          <span className={`text-sm font-black w-6 text-center rounded bg-[#0A1F13] ${match.scoreA !== null ? (match.scoreA > (match.scoreB || 0) ? "text-[#A3E635]" : "text-emerald-700") : "text-emerald-900"}`}>{match.scoreA !== null ? match.scoreA : '-'}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3">
-                          <span className="text-xs font-bold text-white truncate pr-2">{match.teamB}</span>
-                          <span className={`text-sm font-black w-6 text-center rounded bg-[#0A1F13] ${match.scoreB !== null ? (match.scoreB > (match.scoreA || 0) ? "text-[#A3E635]" : "text-emerald-700") : "text-emerald-900"}`}>{match.scoreB !== null ? match.scoreB : '-'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col justify-center w-64">
-                    <h3 className="text-center text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4 flex justify-center items-center gap-1.5"><Trophy className="w-3.5 h-3.5" fill="currentColor"/> Gran Final</h3>
-                    <div className="bg-gradient-to-br from-[#13321F] to-[#0A1F13] border border-amber-500/40 rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.15)] flex flex-col">
-                        <div className="flex justify-between items-center p-4 border-b border-[#1E4D2F]">
-                          <span className="text-sm font-bold text-white truncate pr-2">{mockBracket.final[0].teamA}</span>
-                          <span className="text-base font-black w-8 text-center rounded bg-[#0A1F13] text-emerald-900">-</span>
-                        </div>
-                        <div className="flex justify-between items-center p-4">
-                          <span className="text-sm font-bold text-emerald-500/60 truncate pr-2">{mockBracket.final[0].teamB}</span>
-                          <span className="text-base font-black w-8 text-center rounded bg-[#0A1F13] text-emerald-900">-</span>
-                        </div>
+                    </div>
+
+                    <div className="text-center text-sm font-black text-[#151711] md:text-lg">
+                      {row.pts}
+                    </div>
+
+                    <div className="text-center text-xs font-bold text-[#74786a] md:text-sm">
+                      {row.j}
+                    </div>
+
+                    <div className="text-center text-xs font-bold text-[#74786a] md:text-sm">
+                      {row.g}
+                    </div>
+
+                    <div className="text-center text-xs font-black text-[#151711] md:text-sm">
+                      {row.dif}
+                    </div>
+
+                    <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
+                      {row.e}
+                    </div>
+
+                    <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
+                      {row.p}
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            </motion.div>
+            </motion.section>
           )}
 
+          {activeTab === "llaves" && (
+            <motion.section
+              key="llaves"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14 }}
+              transition={{ duration: 0.25 }}
+              className="rounded-[34px] bg-[#151711] p-5 text-white shadow-sm md:p-8"
+            >
+              <div className="mb-8">
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#d7c77a]">
+                  Fase final
+                </p>
+
+                <h2 className="mt-1 text-3xl font-black tracking-[-0.06em] md:text-4xl">
+                  Camino a la final
+                </h2>
+              </div>
+
+              <div className="overflow-x-auto pb-3">
+                <div className="grid min-w-[880px] grid-cols-[1fr_1fr_1fr] gap-6">
+                  <BracketColumn title="Cuartos de final" matches={mockBracket.cuartos} />
+                  <BracketColumn title="Semifinales" matches={mockBracket.semis} compact />
+                  <BracketColumn title="Final" matches={mockBracket.final} final />
+                </div>
+              </div>
+            </motion.section>
+          )}
         </AnimatePresence>
+      </section>
+    </main>
+  );
+}
+
+function FeaturedMiniTeam({
+  name,
+  score,
+  active,
+  draw,
+}: {
+  name: string;
+  score: number | null;
+  active: boolean;
+  draw: boolean;
+}) {
+  return (
+    <div
+      className={`mt-2 flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 ${
+        active
+          ? "border-emerald-700/25"
+          : draw
+            ? "border-[#d7c77a]/50"
+            : "border-transparent"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className={`h-6 w-1 rounded-full ${
+            active ? "bg-emerald-700" : draw ? "bg-[#d7c77a]" : "bg-[#ded9cc]"
+          }`}
+        />
+
+        <p
+          className={`truncate text-sm ${
+            active || draw ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
+          }`}
+        >
+          {name}
+        </p>
       </div>
+
+      <span
+        className={`text-sm font-black ${
+          active ? "text-emerald-800" : draw ? "text-[#8a7629]" : "text-[#151711]"
+        }`}
+      >
+        {score ?? "-"}
+      </span>
+    </div>
+  );
+}
+
+function FeaturedMatch({
+  match,
+  onClick,
+  getInitials,
+}: {
+  match: Match;
+  onClick: () => void;
+  getInitials: (name: string) => string;
+}) {
+  const isLive = match.status === "en_curso";
+  const isDraw =
+    match.scoreA !== null && match.scoreB !== null && match.scoreA === match.scoreB;
+
+  return (
+    <button
+      onClick={onClick}
+      className="group relative w-full overflow-hidden rounded-[38px] bg-[#151711] p-5 text-left text-white shadow-[0_24px_70px_rgba(21,23,17,0.22)] md:p-8"
+    >
+      <div className="absolute right-[-90px] top-[-90px] h-64 w-64 rounded-full bg-[#d7c77a]/20 blur-3xl" />
+      <div className="absolute bottom-[-120px] left-[-80px] h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+
+      <div className="relative z-10 mb-8 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] ${
+              isLive ? "bg-emerald-50 text-emerald-800" : "bg-white/10 text-white/65"
+            }`}
+          >
+            {isLive ? "En juego" : match.status === "finalizado" ? "Finalizado" : "Próximo"}
+          </span>
+
+          {isDraw && (
+            <span className="rounded-full bg-[#d7c77a]/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#e8db98]">
+              Empate
+            </span>
+          )}
+
+          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
+            {match.category}
+          </span>
+        </div>
+
+        <span className="flex items-center gap-1.5 text-xs font-bold text-white/50">
+          <MapPin className="h-4 w-4" />
+          {match.court}
+        </span>
+      </div>
+
+      <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <TeamHero
+          name={match.teamA}
+          initials={getInitials(match.teamA)}
+          active={
+            match.scoreA !== null &&
+            match.scoreB !== null &&
+            match.scoreA > match.scoreB
+          }
+          draw={isDraw}
+        />
+
+        <div className="text-center">
+          {match.status === "por_jugar" ? (
+            <>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">
+                Inicio
+              </p>
+              <p className="mt-1 text-5xl font-black tracking-[-0.07em]">
+                {match.time}
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-5xl font-black tracking-[-0.08em] md:text-6xl">
+                {match.scoreA}
+              </span>
+              <span className="text-2xl font-black text-[#d7c77a]">:</span>
+              <span className="text-5xl font-black tracking-[-0.08em] md:text-6xl">
+                {match.scoreB}
+              </span>
+            </div>
+          )}
+
+          <p className="mt-4 text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
+            Abrir partido
+          </p>
+        </div>
+
+        <TeamHero
+          name={match.teamB}
+          initials={getInitials(match.teamB)}
+          active={
+            match.scoreA !== null &&
+            match.scoreB !== null &&
+            match.scoreB > match.scoreA
+          }
+          draw={isDraw}
+        />
+      </div>
+    </button>
+  );
+}
+
+function MatchRow({
+  match,
+  onClick,
+  getInitials,
+}: {
+  match: Match;
+  onClick: () => void;
+  getInitials: (name: string) => string;
+}) {
+  const isDraw =
+    match.scoreA !== null && match.scoreB !== null && match.scoreA === match.scoreB;
+
+  return (
+    <button
+      onClick={onClick}
+      className="grid w-full grid-cols-[64px_1fr] items-center gap-4 rounded-[26px] border border-[#ded9cc] bg-white/70 p-4 text-left shadow-sm transition hover:border-[#151711]/25 hover:bg-white sm:grid-cols-[88px_1fr_auto]"
+    >
+      <div>
+        <p className="text-lg font-black tracking-[-0.04em]">{match.time}</p>
+        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+          {match.category}
+        </p>
+      </div>
+
+      <div className="min-w-0 space-y-2">
+        <MatchTeamLine
+          initials={getInitials(match.teamA)}
+          name={match.teamA}
+          score={match.scoreA}
+          winner={match.scoreA !== null && match.scoreB !== null && match.scoreA > match.scoreB}
+          draw={isDraw}
+        />
+
+        <MatchTeamLine
+          initials={getInitials(match.teamB)}
+          name={match.teamB}
+          score={match.scoreB}
+          winner={match.scoreA !== null && match.scoreB !== null && match.scoreB > match.scoreA}
+          draw={isDraw}
+        />
+      </div>
+
+      <div className="hidden text-right sm:block">
+        <p className="text-xs font-black text-[#151711]">{match.court}</p>
+        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+          {match.status === "en_curso"
+            ? "En juego"
+            : match.status === "finalizado"
+              ? "Final"
+              : "Pendiente"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function MatchTeamLine({
+  initials,
+  name,
+  score,
+  winner,
+  draw,
+}: {
+  initials: string;
+  name: string;
+  score: number | null;
+  winner: boolean;
+  draw: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 ${
+        winner
+          ? "border-emerald-700/25 bg-white"
+          : draw
+            ? "border-[#d7c77a]/45 bg-white"
+            : "border-transparent"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={`h-8 w-1.5 shrink-0 rounded-full ${
+            winner ? "bg-emerald-700" : draw ? "bg-[#d7c77a]" : "bg-[#ded9cc]"
+          }`}
+        />
+
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+            winner
+              ? "bg-emerald-50 text-emerald-800"
+              : draw
+                ? "bg-[#f5edc9] text-[#6f6125]"
+                : "bg-[#f0ede3] text-[#74786a]"
+          }`}
+        >
+          {initials}
+        </span>
+
+        <span
+          className={`truncate text-sm ${
+            winner || draw ? "font-black text-[#151711]" : "font-bold text-[#62675d]"
+          }`}
+        >
+          {name}
+        </span>
+      </div>
+
+      <span
+        className={`text-xl font-black tracking-[-0.05em] ${
+          winner ? "text-emerald-800" : draw ? "text-[#8a7629]" : "text-[#151711]"
+        }`}
+      >
+        {score ?? "-"}
+      </span>
+    </div>
+  );
+}
+
+function TeamHero({
+  name,
+  initials,
+  active,
+  draw,
+}: {
+  name: string;
+  initials: string;
+  active: boolean;
+  draw: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 text-center">
+      <div
+        className={`flex h-14 w-14 items-center justify-center rounded-full border text-base font-black shadow-inner md:h-16 md:w-16 md:text-lg ${
+          active
+            ? "border-emerald-400/60 bg-white text-emerald-800"
+            : draw
+              ? "border-[#d7c77a]/70 bg-white text-[#7a6822]"
+              : "border-white/15 bg-white/10 text-white"
+        }`}
+      >
+        {initials}
+      </div>
+
+      <div className="flex flex-col items-center gap-1">
+        {(active || draw) && (
+          <span
+            className={`h-1 w-8 rounded-full ${
+              active ? "bg-emerald-500" : "bg-[#d7c77a]"
+            }`}
+          />
+        )}
+
+        <p className="max-w-[92px] text-xs font-black leading-tight text-white md:max-w-[110px] md:text-sm">
+          {name}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function HockeyField({ courtName }: { courtName: string }) {
+  return (
+    <div className="relative h-48 w-full overflow-hidden rounded-[26px] bg-[#29754f] shadow-inner">
+      <div className="absolute inset-0 opacity-20 [background-image:repeating-linear-gradient(0deg,transparent,transparent_22px,rgba(0,0,0,0.16)_22px,rgba(0,0,0,0.16)_44px)]" />
+      <div className="absolute left-0 top-1/2 h-[2px] w-full -translate-y-1/2 bg-white/55" />
+      <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/55" />
+      <div className="absolute left-1/2 top-0 h-16 w-36 -translate-x-1/2 rounded-b-full border-2 border-t-0 border-white/55" />
+      <div className="absolute bottom-0 left-1/2 h-16 w-36 -translate-x-1/2 rounded-t-full border-2 border-b-0 border-white/55" />
+      <div className="absolute inset-4 rounded-[20px] border border-white/30" />
+
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-[#151711]/80 px-4 py-2 shadow-xl backdrop-blur">
+        <MapPin className="h-4 w-4 text-[#d7c77a]" />
+        <span className="text-xs font-black uppercase tracking-[0.2em] text-white">
+          {courtName}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MatchModal({
+  match,
+  onClose,
+  getInitials,
+}: {
+  match: Match;
+  onClose: () => void;
+  getInitials: (name: string) => string;
+}) {
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-[80] bg-[#151711]/70 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+
+      <motion.section
+        className="fixed bottom-0 left-0 right-0 z-[90] max-h-[92vh] overflow-hidden rounded-t-[34px] bg-[#f6f4ee] shadow-2xl md:bottom-auto md:left-1/2 md:top-1/2 md:w-[500px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[34px]"
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+        transition={{ type: "spring", damping: 26, stiffness: 220 }}
+      >
+        <div className="relative bg-white p-4">
+          <button
+            onClick={onClose}
+            className="absolute right-7 top-7 z-20 rounded-full bg-[#151711]/80 p-2 text-white backdrop-blur transition hover:bg-[#151711]"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <HockeyField courtName={match.court} />
+
+          <div className="relative z-10 mx-2 -mt-8 rounded-[28px] border border-[#eee9dd] bg-white p-5 shadow-xl">
+            <div className="mb-5 flex justify-center">
+              <span className="rounded-full bg-[#151711] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white">
+                {match.category}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <ModalTeam name={match.teamA} initials={getInitials(match.teamA)} />
+
+              <div className="text-center">
+                {match.status === "por_jugar" ? (
+                  <>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#74786a]">
+                      Inicio
+                    </p>
+                    <p className="mt-1 text-4xl font-black tracking-[-0.07em] text-[#151711]">
+                      {match.time}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-5xl font-black tracking-[-0.08em] text-[#151711]">
+                      {match.scoreA}
+                    </span>
+                    <span className="text-2xl font-black text-[#ded9cc]">:</span>
+                    <span className="text-5xl font-black tracking-[-0.08em] text-[#151711]">
+                      {match.scoreB}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <ModalTeam name={match.teamB} initials={getInitials(match.teamB)} />
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[390px] overflow-y-auto p-5">
+          <p className="mb-4 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+            Eventos del partido
+          </p>
+
+          {match.events.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-[#ded9cc] bg-white/70 p-8 text-center">
+              <Clock className="mx-auto mb-3 h-7 w-7 text-[#b7b0a0]" />
+              <p className="text-sm font-bold text-[#74786a]">
+                Los eventos aparecerán cuando el partido comience.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...match.events]
+                .sort((a, b) => b.minute - a.minute)
+                .map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm"
+                  >
+                    <span className="w-9 text-right text-sm font-black text-[#74786a]">
+                      {event.minute}'
+                    </span>
+
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f6f4ee]">
+                      {event.type === "goal" && <Target className="h-5 w-5 text-[#151711]" />}
+                      {event.type === "green_card" && (
+                        <Square className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+                      )}
+                      {event.type === "yellow_card" && (
+                        <Square className="h-4 w-4 fill-[#d7c77a] text-[#d7c77a]" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-[#151711]">
+                        {event.player}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+                        {event.type === "goal"
+                          ? "Gol"
+                          : event.type === "green_card"
+                            ? "Tarjeta verde"
+                            : "Tarjeta amarilla"}{" "}
+                        · {event.team === "teamA" ? match.teamA : match.teamB}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      </motion.section>
+    </>
+  );
+}
+
+function ModalTeam({ name, initials }: { name: string; initials: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ede3] text-sm font-black text-[#151711]">
+        {initials}
+      </div>
+
+      <p className="max-w-[105px] text-xs font-black leading-tight text-[#151711]">
+        {name}
+      </p>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ElementType;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-xs font-black transition sm:px-4 sm:text-sm md:flex-none ${
+        active ? "text-white" : "text-[#74786a] hover:text-[#151711]"
+      }`}
+    >
+      {active && (
+        <motion.span
+          layoutId="active-tab"
+          className="absolute inset-0 rounded-full bg-[#151711]"
+          transition={{ type: "spring", stiffness: 420, damping: 34 }}
+        />
+      )}
+
+      <Icon className="relative z-10 h-4 w-4" />
+      <span className="relative z-10">{label}</span>
+    </button>
+  );
+}
+
+function BracketColumn({
+  title,
+  matches,
+  compact = false,
+  final = false,
+}: {
+  title: string;
+  matches: any[];
+  compact?: boolean;
+  final?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <h3
+        className={`mb-5 text-center text-[11px] font-black uppercase tracking-[0.22em] ${
+          final ? "text-[#d7c77a]" : "text-white/45"
+        }`}
+      >
+        {title}
+      </h3>
+
+      <div
+        className={`flex flex-col gap-5 ${
+          compact ? "pt-[52px] gap-[72px]" : ""
+        } ${final ? "pt-[160px]" : ""}`}
+      >
+        {matches.map((match) => (
+          <BracketMatch key={match.id} match={match} final={final} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BracketMatch({
+  match,
+  final = false,
+}: {
+  match: any;
+  final?: boolean;
+}) {
+  const winnerA =
+    match.scoreA !== null &&
+    match.scoreB !== null &&
+    match.scoreA > match.scoreB;
+
+  const winnerB =
+    match.scoreA !== null &&
+    match.scoreB !== null &&
+    match.scoreB > match.scoreA;
+
+  return (
+    <article
+      className={`overflow-hidden rounded-[22px] border ${
+        final
+          ? "border-[#d7c77a]/40 bg-[#d7c77a]/10"
+          : "border-white/10 bg-white/[0.06]"
+      }`}
+    >
+      <BracketTeam
+        name={match.teamA}
+        score={match.scoreA}
+        active={winnerA || final}
+      />
+
+      <BracketTeam
+        name={match.teamB}
+        score={match.scoreB}
+        active={winnerB || final}
+      />
+
+      {match.penalties && (
+        <p className="border-t border-white/10 px-4 py-2 text-right text-[10px] font-black uppercase tracking-[0.16em] text-white/45">
+          Penales: {match.penalties}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function BracketTeam({
+  name,
+  score,
+  active,
+}: {
+  name: string;
+  score: number | null;
+  active: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between border-b border-white/10 px-4 py-3 last:border-b-0 ${
+        active ? "bg-white/[0.04]" : ""
+      }`}
+    >
+      <span
+        className={`truncate pr-3 text-sm ${
+          active ? "font-black text-white" : "font-bold text-white/50"
+        }`}
+      >
+        {name}
+      </span>
+
+      <span
+        className={`text-lg font-black ${
+          active ? "text-[#d7c77a]" : "text-white/35"
+        }`}
+      >
+        {score ?? "-"}
+      </span>
     </div>
   );
 }

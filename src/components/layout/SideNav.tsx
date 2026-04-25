@@ -1,7 +1,8 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Shield, Activity, ClipboardList } from "lucide-react";
+import { Activity, CalendarDays, ClipboardList, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function SideNav() {
@@ -15,10 +16,19 @@ export default function SideNav() {
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 h-full bg-white/80 backdrop-blur-2xl border-r border-slate-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)] p-6 z-50">
+    <aside className="z-50 hidden h-full w-64 flex-col border-r border-[#ded9cc] bg-[#fbfaf6]/85 p-6 shadow-[8px_0_40px_rgba(21,23,17,0.04)] backdrop-blur-2xl md:flex">
       <div className="mb-10 pl-2">
-        <h2 className="text-2xl font-black tracking-tight text-slate-900">APDES</h2>
-        <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mt-1">Copa 2026</p>
+        <h2 className="text-3xl font-black leading-none tracking-[-0.07em] text-[#151711]">
+          Copa{" "}
+          <span className="relative inline-block">
+            <span className="relative z-10">APDES</span>
+            <span className="absolute -bottom-0.5 left-0 h-2 w-full rounded-full bg-[#d7c77a]/75" />
+          </span>
+        </h2>
+
+        <p className="mt-3 text-[11px] font-black uppercase tracking-[0.22em] text-[#74786a]">
+          Temporada 2026
+        </p>
       </div>
 
       <nav className="flex flex-col gap-2">
@@ -30,28 +40,58 @@ export default function SideNav() {
             <Link
               key={link.name}
               href={link.href}
-              className={`relative flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 ${
-                isActive ? "text-emerald-700" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+              className={`relative overflow-hidden rounded-2xl px-4 py-3.5 transition ${
+                isActive
+                  ? "text-white"
+                  : "text-[#74786a] hover:bg-white/70 hover:text-[#151711]"
               }`}
             >
               {isActive && (
-                <motion.div
+                <motion.span
                   layoutId="sidenav-active"
-                  className="absolute inset-0 bg-emerald-50/80 rounded-2xl border border-emerald-100/50"
-                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  className="absolute inset-0 rounded-2xl bg-[#151711]"
+                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
                 />
               )}
-              
-              <div className="relative z-10 flex items-center gap-4">
-                <Icon strokeWidth={isActive ? 2.5 : 2} className={`w-5 h-5 ${isActive ? "text-emerald-600" : ""}`} />
-                <span className={`text-sm tracking-wide ${isActive ? "font-black" : "font-semibold"}`}>
+
+              <span className="relative z-10 flex items-center gap-4">
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                    isActive ? "bg-white/10" : "bg-[#f0ede3]"
+                  }`}
+                >
+                  <Icon
+                    strokeWidth={isActive ? 2.6 : 2}
+                    className={`h-5 w-5 ${
+                      isActive ? "text-[#d7c77a]" : "text-[#74786a]"
+                    }`}
+                  />
+                </span>
+
+                <span
+                  className={`text-sm tracking-wide ${
+                    isActive ? "font-black" : "font-bold"
+                  }`}
+                >
                   {link.name}
                 </span>
-              </div>
+              </span>
             </Link>
           );
         })}
       </nav>
+
+      <div className="mt-auto rounded-[26px] border border-[#ded9cc] bg-white/65 p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#74786a]">
+          Estado
+        </p>
+        <p className="mt-2 text-sm font-black text-[#151711]">
+          Jornada activa
+        </p>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
+          <div className="h-full w-2/3 rounded-full bg-[#d7c77a]" />
+        </div>
+      </div>
     </aside>
   );
 }

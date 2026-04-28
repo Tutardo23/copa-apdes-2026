@@ -922,10 +922,10 @@ function SchoolBadge({
   const src = schoolEscudos[name];
   const dimensions =
     size === "lg"
-      ? { container: "h-12 w-12 rounded-2xl", image: 34 }
+      ? { container: "h-12 w-12 rounded-2xl" }
       : size === "md"
-        ? { container: "h-12 w-12 rounded-full", image: 30 }
-        : { container: "h-8 w-8 rounded-full", image: 20 };
+        ? { container: "h-12 w-12 rounded-full" }
+        : { container: "h-8 w-8 rounded-full" };
 
   const fallbackTone = emphasize
     ? "bg-[#f5edc9] text-[#6f6125]"
@@ -941,9 +941,9 @@ function SchoolBadge({
         <Image
           src={src}
           alt={`Escudo ${name}`}
-          width={dimensions.image}
-          height={dimensions.image}
-          className="h-auto w-auto object-contain"
+          fill
+          sizes="48px"
+          className="object-contain p-1.5"
         />
       ) : (
         <span className="text-[10px] font-black">{initials}</span>

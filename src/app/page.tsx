@@ -1151,7 +1151,7 @@ function MatchModal({ match, onClose }: { match: Match; onClose: () => void }) {
               {match.events.map((event) => (
                 <div key={event.id} className="flex items-center gap-4 rounded-2xl bg-white p-4">
                   <span className="w-9 text-right text-sm font-black text-[#74786a]">
-                    {event.minute}'
+                    {event.minute}&apos;
                   </span>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f6f4ee]">
                     {event.type === "goal" && <Target className="h-5 w-5" />}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -10,7 +11,6 @@ import {
   ShieldCheck,
   Square,
   Target,
-  Trophy,
   X,
 } from "lucide-react";
 
@@ -48,6 +48,38 @@ const colegios = [
   "Buen Ayre",
   "Los Cerros",
 ];
+
+const schoolEscudos: Record<string, string> = {
+  Mirasoles: "/escudos/mirasoles.png",
+  Torreón: "/escudos/torreon.png",
+  Crisol: "/escudos/crisol.png",
+  "Buen Ayre": "/escudos/buen-ayre.png",
+  "Los Cerros": "/escudos/los-cerros.png",
+};
+
+type SchoolStats = {
+  pts: number;
+  pj: number;
+  pg: number;
+  pe: number;
+  pp: number;
+  gf: number;
+  gc: number;
+  racha: string[];
+};
+
+const teamToSchoolAlias: Record<string, string> = {
+  "Mirasoles Col.": "Mirasoles",
+  "Mirasoles Fed.": "Mirasoles",
+  "Torreón Col.": "Torreón",
+  "Torreón Fed.": "Torreón",
+  "Crisol Col.": "Crisol",
+  "Crisol Fed.": "Crisol",
+  "Buen Ayre Col.": "Buen Ayre",
+  "Los Cerros Col.": "Los Cerros",
+  "Los Cerros Fed.": "Los Cerros",
+  "El Faro": "El Faro",
+};
 
 const schoolThemes: Record<
   string,
@@ -89,7 +121,7 @@ const schoolThemes: Record<
   },
 };
 
-const mockSchoolStats = {
+const mockSchoolStats: Record<string, SchoolStats> = {
   Mirasoles: {
     pts: 24,
     pj: 8,
@@ -201,9 +233,7 @@ export default function MiColegioPage() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   const theme = schoolThemes[selectedSchool] || schoolThemes.Mirasoles;
-  const stats =
-    (mockSchoolStats as Record<string, any>)[selectedSchool] ||
-    mockSchoolStats.Mirasoles;
+  const stats = mockSchoolStats[selectedSchool] || mockSchoolStats.Mirasoles;
 
   const getInitials = (name: string) =>
     name
@@ -257,13 +287,16 @@ export default function MiColegioPage() {
                 <button
                   key={colegio}
                   onClick={() => setSelectedSchool(colegio)}
-                  className={`shrink-0 rounded-2xl border px-4 py-3 text-sm font-black transition ${
+                  className={`shrink-0 rounded-2xl border px-3 py-2.5 text-sm font-black transition ${
                     isActive
                       ? "border-[#151711] bg-[#151711] text-white shadow-sm"
                       : "border-[#ded9cc] bg-white/70 text-[#62675d] hover:border-[#151711]/25 hover:text-[#151711]"
                   }`}
                 >
-                  {colegio}
+                  <span className="flex items-center gap-2">
+                    <SchoolBadge name={colegio} initials={getInitials(colegio)} size="sm" />
+                    <span>{colegio}</span>
+                  </span>
                 </button>
               );
             })}
@@ -292,10 +325,12 @@ export default function MiColegioPage() {
                     </h2>
                   </div>
 
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-lg font-black ${theme.text}`}
-                  >
-                    {getInitials(selectedSchool)}
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white">
+                    <SchoolBadge
+                      name={selectedSchool}
+                      initials={getInitials(selectedSchool)}
+                      size="lg"
+                    />
                   </div>
                 </div>
 
@@ -448,6 +483,7 @@ function MatchCard({
       <div className="space-y-2">
         <TeamLine
           name={match.teamA}
+          schoolName={getSchoolName(match.teamA)}
           initials={getInitials(match.teamA)}
           active={match.teamA.includes(selectedSchool)}
           theme={theme}
@@ -455,6 +491,7 @@ function MatchCard({
 
         <TeamLine
           name={match.teamB}
+          schoolName={getSchoolName(match.teamB)}
           initials={getInitials(match.teamB)}
           active={match.teamB.includes(selectedSchool)}
           theme={theme}
@@ -521,6 +558,7 @@ function ResultCard({
       <div className="space-y-2">
         <ResultTeamLine
           name={match.teamA}
+          schoolName={getSchoolName(match.teamA)}
           initials={getInitials(match.teamA)}
           score={match.scoreA}
           active={match.teamA.includes(selectedSchool)}
@@ -531,6 +569,7 @@ function ResultCard({
 
         <ResultTeamLine
           name={match.teamB}
+          schoolName={getSchoolName(match.teamB)}
           initials={getInitials(match.teamB)}
           score={match.scoreB}
           active={match.teamB.includes(selectedSchool)}
@@ -545,11 +584,13 @@ function ResultCard({
 
 function TeamLine({
   name,
+  schoolName,
   initials,
   active,
   theme,
 }: {
   name: string;
+  schoolName: string;
   initials: string;
   active: boolean;
   theme: { accent: string; soft: string; text: string };
@@ -562,13 +603,13 @@ function TeamLine({
     >
       <span className={`h-8 w-1.5 rounded-full ${active ? theme.accent : "bg-[#ded9cc]"}`} />
 
-      <span
-        className={`flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-black ${
-          active ? `${theme.soft} ${theme.text}` : "bg-[#f0ede3] text-[#74786a]"
-        }`}
-      >
-        {initials}
-      </span>
+      <SchoolBadge
+        name={schoolName}
+        initials={initials}
+        size="sm"
+        active={active}
+        theme={theme}
+      />
 
       <span
         className={`truncate text-sm ${
@@ -583,6 +624,7 @@ function TeamLine({
 
 function ResultTeamLine({
   name,
+  schoolName,
   initials,
   score,
   active,
@@ -591,6 +633,7 @@ function ResultTeamLine({
   theme,
 }: {
   name: string;
+  schoolName: string;
   initials: string;
   score: number | null;
   active: boolean;
@@ -617,19 +660,14 @@ function ResultTeamLine({
           }`}
         />
 
-        <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
-            winner
-              ? "bg-emerald-50 text-emerald-800"
-              : draw
-                ? "bg-[#f5edc9] text-[#6f6125]"
-                : active
-                  ? `${theme.soft} ${theme.text}`
-                  : "bg-[#f0ede3] text-[#74786a]"
-          }`}
-        >
-          {initials}
-        </span>
+        <SchoolBadge
+          name={schoolName}
+          initials={initials}
+          size="sm"
+          active={active || winner || draw}
+          theme={theme}
+          emphasize={winner || draw}
+        />
 
         <span
           className={`truncate text-sm ${
@@ -724,6 +762,7 @@ function MatchModal({
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
               <ModalTeam
                 name={match.teamA}
+                schoolName={getSchoolName(match.teamA)}
                 initials={getInitials(match.teamA)}
                 active={match.teamA.includes(selectedSchool)}
                 theme={theme}
@@ -754,6 +793,7 @@ function MatchModal({
 
               <ModalTeam
                 name={match.teamB}
+                schoolName={getSchoolName(match.teamB)}
                 initials={getInitials(match.teamB)}
                 active={match.teamB.includes(selectedSchool)}
                 theme={theme}
@@ -796,7 +836,7 @@ function MatchModal({
                         className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm"
                       >
                         <span className="w-9 text-right text-sm font-black text-[#74786a]">
-                          {event.minute}'
+                          {event.minute}&apos;
                         </span>
 
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f6f4ee]">
@@ -838,28 +878,76 @@ function MatchModal({
 
 function ModalTeam({
   name,
+  schoolName,
   initials,
   active,
   theme,
 }: {
   name: string;
+  schoolName: string;
   initials: string;
   active: boolean;
   theme: { accent: string; soft: string; text: string };
 }) {
   return (
     <div className="flex flex-col items-center gap-2 text-center">
-      <div
-        className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-black ${
-          active ? `${theme.soft} ${theme.text}` : "bg-[#f0ede3] text-[#151711]"
-        }`}
-      >
-        {initials}
-      </div>
+      <SchoolBadge name={schoolName} initials={initials} size="md" active={active} theme={theme} />
 
       <p className="max-w-[105px] text-xs font-black leading-tight text-[#151711]">
         {name}
       </p>
     </div>
+  );
+}
+
+function getSchoolName(teamName: string): string {
+  return teamToSchoolAlias[teamName] || teamName;
+}
+
+function SchoolBadge({
+  name,
+  initials,
+  size = "sm",
+  active = false,
+  theme,
+  emphasize = false,
+}: {
+  name: string;
+  initials: string;
+  size?: "sm" | "md" | "lg";
+  active?: boolean;
+  theme?: { soft: string; text: string };
+  emphasize?: boolean;
+}) {
+  const src = schoolEscudos[name];
+  const dimensions =
+    size === "lg"
+      ? { container: "h-12 w-12 rounded-2xl", image: 34 }
+      : size === "md"
+        ? { container: "h-12 w-12 rounded-full", image: 30 }
+        : { container: "h-8 w-8 rounded-full", image: 20 };
+
+  const fallbackTone = emphasize
+    ? "bg-[#f5edc9] text-[#6f6125]"
+    : active && theme
+      ? `${theme.soft} ${theme.text}`
+      : "bg-[#f0ede3] text-[#74786a]";
+
+  return (
+    <span
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden border border-black/5 ${dimensions.container} ${fallbackTone}`}
+    >
+      {src ? (
+        <Image
+          src={src}
+          alt={`Escudo ${name}`}
+          width={dimensions.image}
+          height={dimensions.image}
+          className="h-auto w-auto object-contain"
+        />
+      ) : (
+        <span className="text-[10px] font-black">{initials}</span>
+      )}
+    </span>
   );
 }

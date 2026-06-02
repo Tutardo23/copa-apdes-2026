@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, CalendarDays, ClipboardList, Shield } from "lucide-react";
+import { Activity, CalendarDays, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function BottomNav() {
@@ -12,7 +12,6 @@ export default function BottomNav() {
     { name: "Inicio", href: "/", icon: CalendarDays },
     { name: "Colegio", href: "/mi-colegio", icon: Shield },
     { name: "Datos", href: "/estadisticas", icon: Activity },
-    { name: "Planilla", href: "/admin", icon: ClipboardList },
   ];
 
   return (
@@ -26,7 +25,7 @@ export default function BottomNav() {
             <Link
               key={link.name}
               href={link.href}
-              className={`relative flex h-14 w-[76px] items-center justify-center rounded-2xl transition ${
+              className={`relative flex h-14 w-[96px] items-center justify-center rounded-2xl transition ${
                 isActive
                   ? "text-[#151711]"
                   : "text-[#74786a] hover:text-[#151711]"

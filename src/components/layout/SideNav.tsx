@@ -2,17 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, CalendarDays, ClipboardList, Shield } from "lucide-react";
+import { Activity, CalendarDays, Shield } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTournament } from "../providers/TournamentProvider";
 
 export default function SideNav() {
   const pathname = usePathname();
+  const { matches } = useTournament();
+  const inProgress = matches.filter((match) => match.status === "en_curso").length;
+  const completed = matches.filter((match) => match.status === "finalizado").length;
+  const progress = matches.length === 0 ? 0 : Math.round((completed / matches.length) * 100);
 
   const links = [
     { name: "Inicio", href: "/", icon: CalendarDays },
     { name: "Mi Colegio", href: "/mi-colegio", icon: Shield },
     { name: "Estadísticas", href: "/estadisticas", icon: Activity },
-    { name: "Planilla en Vivo", href: "/admin", icon: ClipboardList },
   ];
 
   return (
@@ -86,10 +90,14 @@ export default function SideNav() {
           Estado
         </p>
         <p className="mt-2 text-sm font-black text-[#151711]">
-          Jornada activa
+          {inProgress > 0
+            ? `${inProgress} partido${inProgress === 1 ? "" : "s"} en juego`
+            : matches.length > 0
+              ? `${matches.length} partidos cargados`
+              : "Sin partidos cargados"}
         </p>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
-          <div className="h-full w-2/3 rounded-full bg-[#d7c77a]" />
+          <div className="h-full rounded-full bg-[#d7c77a]" style={{ width: `${progress}%` }} />
         </div>
       </div>
     </aside>

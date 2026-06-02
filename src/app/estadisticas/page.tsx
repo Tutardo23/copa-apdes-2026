@@ -78,9 +78,9 @@ export default function EstadisticasPage() {
               <div className="flex items-center gap-2 rounded-full border border-[#ded9cc] bg-white/75 p-1 shadow-sm">
                 <CalendarDays className="ml-2 h-4 w-4 text-[#74786a]" />
                 <DayButton active={dayFilter === "todos"} label="Todos" onClick={() => setDayFilter("todos")} />
-                <DayButton active={dayFilter === "jueves"} label="Jue" onClick={() => setDayFilter("jueves")} />
-                <DayButton active={dayFilter === "viernes"} label="Vie" onClick={() => setDayFilter("viernes")} />
-                <DayButton active={dayFilter === "sabado"} label="Sáb" onClick={() => setDayFilter("sabado")} />
+                <DayButton active={dayFilter === "todos"} label="Todos" onClick={() => setDayFilter("todos")} />
+<DayButton active={dayFilter === "dia1"} label="Día 1" onClick={() => setDayFilter("dia1")} />
+<DayButton active={dayFilter === "dia2"} label="Día 2" onClick={() => setDayFilter("dia2")} />
               </div>
             </div>
           </div>

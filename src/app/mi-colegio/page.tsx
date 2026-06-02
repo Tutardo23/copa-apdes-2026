@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useSchoolPreference } from "@/src/components/providers/SchoolPreferenceProvider";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
+import { useSimulation } from "@/src/components/providers/SimulationProvider";
 import type { MatchItem } from "@/src/lib/tournament-types";
 
 type CompetitionFilter = "todos" | "Federado" | "Colegial";
@@ -86,8 +87,14 @@ const categoryOptions: CategoryFilter[] = [
 ];
 
 export default function MiColegioPage() {
-  const { matches } = useTournament();
+  const { matches: realMatches } = useTournament();
   const { selectedSchool: preferredSchool, viewingAllSchools, clearSelectedSchool } = useSchoolPreference();
+  const { getEffectiveMatches, simulationEnabled } = useSimulation();
+
+  const matches = useMemo(
+    () => getEffectiveMatches(realMatches),
+    [realMatches, getEffectiveMatches],
+  );
   const [schoolChoice, setSchoolChoice] = useState("");
   const [selectedCompetition, setSelectedCompetition] =
     useState<CompetitionFilter>("todos");
@@ -180,6 +187,11 @@ export default function MiColegioPage() {
       )}
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 md:px-8 md:pb-12">
+        {simulationEnabled && (
+          <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-black text-sky-900">
+            Modo simulación activo: estos datos pueden incluir resultados ficticios.
+          </div>
+        )}
         <header className="mb-8">
           <p className="mb-3 text-[11px] font-black uppercase tracking-[0.26em] text-[#74786a]">
             Seguimiento por institución

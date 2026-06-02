@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays, LayoutGrid, MapPin, Trophy, X } from "lucide-react";
 import { useSchoolPreference } from "@/src/components/providers/SchoolPreferenceProvider";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
+import { useSimulation } from "@/src/components/providers/SimulationProvider";
 import { getSchoolNameFromTeam, isSchoolInMatch } from "@/src/lib/schools";
 import type { MatchItem } from "@/src/lib/tournament-types";
 
@@ -40,8 +41,14 @@ const dayOptions: { id: DayFilter; label: string }[] = [
 ];
 
 export default function Home() {
-  const { matches } = useTournament();
+  const { matches: realMatches } = useTournament();
   const { selectedSchool, viewingAllSchools, clearSelectedSchool } = useSchoolPreference();
+  const { getEffectiveMatches, simulationEnabled } = useSimulation();
+
+  const matches = useMemo(
+    () => getEffectiveMatches(realMatches),
+    [realMatches, getEffectiveMatches],
+  );
   const [activeTab, setActiveTab] = useState<TabType>("fixture");
   const [competition, setCompetition] = useState<CompetitionFilter>("Federado");
   const [category, setCategory] = useState<CategoryFilter>("Categoría 1");
@@ -113,6 +120,11 @@ export default function Home() {
       )}
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 md:px-8 md:pb-12">
+        {simulationEnabled && (
+          <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-black text-sky-900">
+            Modo simulación activo: los resultados y llaves se muestran con carga ficticia. No modifica la base real.
+          </div>
+        )}
         <header className="mb-7">
           <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">

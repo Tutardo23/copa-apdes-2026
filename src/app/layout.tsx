@@ -6,6 +6,7 @@ import SideNav from "../components/layout/SideNav";
 import SchoolSelectorModal from "../components/SchoolSelectorModal";
 import { SchoolPreferenceProvider } from "../components/providers/SchoolPreferenceProvider";
 import { TournamentProvider } from "../components/providers/TournamentProvider";
+import { SimulationProvider } from "../components/providers/SimulationProvider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${inter.variable} font-sans antialiased bg-[#f8fafc]`}>
         <TournamentProvider>
+          <SimulationProvider>
           <SchoolPreferenceProvider>
             <SchoolSelectorModal />
 
@@ -42,6 +44,7 @@ export default function RootLayout({
               <BottomNav />
             </div>
           </SchoolPreferenceProvider>
+          </SimulationProvider>
         </TournamentProvider>
       </body>
     </html>

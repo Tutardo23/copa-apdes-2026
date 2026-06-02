@@ -136,6 +136,13 @@ export default function AdminAgendaPage() {
                 >
                   Limpiar filtros
                 </button>
+
+                <button
+                  onClick={() => router.push("/admin/simulacion")}
+                  className="rounded-full bg-sky-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition hover:-translate-y-0.5"
+                >
+                  Simular resultados
+                </button>
                 <p className="ml-auto text-xs font-black uppercase tracking-[0.14em] text-[#74786a]">{visibleMatches.length} partidos visibles</p>
               </div>
             </section>

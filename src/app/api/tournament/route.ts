@@ -6,6 +6,7 @@ import {
   getMatches,
   resetClock,
   resetMatch,
+  setFinalScore,
   setPeriod,
   toggleClock,
   undoLastEvent,
@@ -86,6 +87,10 @@ export async function POST(request: Request) {
       case "reset_match":
         await resetMatch(action.matchId);
         break;
+      case "set_final_score":
+        validateFinalScore(action.payload);
+        await setFinalScore(action.matchId, action.payload);
+        break;
       case "set_period":
         if (![1, 2, 3, 4].includes(action.period)) {
           throw new Error("Periodo invalido.");
@@ -113,6 +118,16 @@ function validateEvent(payload: Extract<TournamentAction, { action: "event" }>["
   }
   if (!payload.player || payload.player.trim().length > 80) {
     throw new Error("Jugadora invalida.");
+  }
+}
+
+function validateFinalScore(payload: Extract<TournamentAction, { action: "set_final_score" }>["payload"]) {
+  if (!Number.isInteger(payload.scoreA) || !Number.isInteger(payload.scoreB)) {
+    throw new Error("Marcador invalido.");
+  }
+
+  if (payload.scoreA < 0 || payload.scoreB < 0 || payload.scoreA > 99 || payload.scoreB > 99) {
+    throw new Error("Marcador invalido.");
   }
 }
 
@@ -149,6 +164,7 @@ function readableError(error: unknown, fallback: string) {
     "Equipo invalido.",
     "Evento invalido.",
     "Jugadora invalida.",
+    "Marcador invalido.",
     "Dia invalido.",
     "Fase invalida.",
     "Completa todos los datos del partido.",

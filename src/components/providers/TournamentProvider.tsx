@@ -32,6 +32,7 @@ type TournamentContextType = {
   resetClock: (matchId: number) => Promise<boolean>;
   resetMatch: (matchId: number) => Promise<boolean>;
   setPeriod: (matchId: number, period: 1 | 2 | 3 | 4) => Promise<boolean>;
+  setFinalScore: (matchId: number, payload: { scoreA: number; scoreB: number; finish?: boolean }) => Promise<boolean>;
   finishMatch: (matchId: number) => Promise<boolean>;
 };
 
@@ -159,6 +160,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       resetClock: (matchId) => sendAdminAction({ action: "reset_clock", matchId }),
       resetMatch: (matchId) => sendAdminAction({ action: "reset_match", matchId }),
       setPeriod: (matchId, period) => sendAdminAction({ action: "set_period", matchId, period }),
+      setFinalScore: (matchId, payload) => sendAdminAction({ action: "set_final_score", matchId, payload }),
       finishMatch: (matchId) => sendAdminAction({ action: "finish", matchId }),
     }),
     [

@@ -341,6 +341,39 @@ export async function resetMatch(matchId: number) {
   ]);
 }
 
+export async function setFinalScore(
+  matchId: number,
+  payload: { scoreA: number; scoreB: number; finish?: boolean }
+) {
+  const sql = database();
+
+  if (!Number.isInteger(payload.scoreA) || !Number.isInteger(payload.scoreB)) {
+    throw new Error("Marcador invalido.");
+  }
+
+  if (payload.scoreA < 0 || payload.scoreB < 0 || payload.scoreA > 99 || payload.scoreB > 99) {
+    throw new Error("Marcador invalido.");
+  }
+
+  await sql`
+    UPDATE copa_matches
+    SET
+      score_a = ${payload.scoreA},
+      score_b = ${payload.scoreB},
+      status = CASE WHEN ${Boolean(payload.finish)} THEN 'finalizado' ELSE 'en_curso' END,
+      clock_seconds = clock_seconds +
+        CASE
+          WHEN is_running AND clock_started_at IS NOT NULL
+            THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+          ELSE 0
+        END,
+      clock_started_at = NULL,
+      is_running = FALSE,
+      updated_at = NOW()
+    WHERE id = ${matchId};
+  `;
+}
+
 export async function setPeriod(matchId: number, period: 1 | 2 | 3 | 4) {
   const sql = database();
   await sql`

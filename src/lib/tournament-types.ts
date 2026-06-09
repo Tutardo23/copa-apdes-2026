@@ -64,6 +64,11 @@ export type TournamentAction =
       matchId: number;
       payload: { team: TeamKey; type: EventType; player: string };
     }
+  | {
+      action: "set_final_score";
+      matchId: number;
+      payload: { scoreA: number; scoreB: number; finish?: boolean };
+    }
   | { action: "undo"; matchId: number }
   | { action: "toggle_clock"; matchId: number }
   | { action: "reset_clock"; matchId: number }

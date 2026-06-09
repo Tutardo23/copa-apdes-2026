@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, CalendarDays, Shield } from "lucide-react";
+import { CalendarDays, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTournament } from "../providers/TournamentProvider";
 
@@ -16,7 +16,6 @@ export default function SideNav() {
   const links = [
     { name: "Inicio", href: "/", icon: CalendarDays },
     { name: "Mi Colegio", href: "/mi-colegio", icon: Shield },
-    { name: "Estadísticas", href: "/estadisticas", icon: Activity },
   ];
 
   return (
@@ -45,9 +44,7 @@ export default function SideNav() {
               key={link.name}
               href={link.href}
               className={`relative overflow-hidden rounded-2xl px-4 py-3.5 transition ${
-                isActive
-                  ? "text-white"
-                  : "text-[#74786a] hover:bg-white/70 hover:text-[#151711]"
+                isActive ? "text-white" : "text-[#74786a] hover:bg-white/70 hover:text-[#151711]"
               }`}
             >
               {isActive && (
@@ -59,26 +56,11 @@ export default function SideNav() {
               )}
 
               <span className="relative z-10 flex items-center gap-4">
-                <span
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                    isActive ? "bg-white/10" : "bg-[#f0ede3]"
-                  }`}
-                >
-                  <Icon
-                    strokeWidth={isActive ? 2.6 : 2}
-                    className={`h-5 w-5 ${
-                      isActive ? "text-[#d7c77a]" : "text-[#74786a]"
-                    }`}
-                  />
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${isActive ? "bg-white/10" : "bg-[#f0ede3]"}`}>
+                  <Icon strokeWidth={isActive ? 2.6 : 2} className={`h-5 w-5 ${isActive ? "text-[#d7c77a]" : "text-[#74786a]"}`} />
                 </span>
 
-                <span
-                  className={`text-sm tracking-wide ${
-                    isActive ? "font-black" : "font-bold"
-                  }`}
-                >
-                  {link.name}
-                </span>
+                <span className={`text-sm tracking-wide ${isActive ? "font-black" : "font-bold"}`}>{link.name}</span>
               </span>
             </Link>
           );
@@ -86,9 +68,7 @@ export default function SideNav() {
       </nav>
 
       <div className="mt-auto rounded-[26px] border border-[#ded9cc] bg-white/65 p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#74786a]">
-          Estado
-        </p>
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#74786a]">Estado</p>
         <p className="mt-2 text-sm font-black text-[#151711]">
           {inProgress > 0
             ? `${inProgress} partido${inProgress === 1 ? "" : "s"} en juego`
@@ -99,6 +79,9 @@ export default function SideNav() {
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
           <div className="h-full rounded-full bg-[#d7c77a]" style={{ width: `${progress}%` }} />
         </div>
+        <p className="mt-3 text-[10px] font-bold leading-4 text-[#74786a]">
+          Las estadísticas generales quedan reservadas para administración.
+        </p>
       </div>
     </aside>
   );

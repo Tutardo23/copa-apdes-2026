@@ -3,7 +3,16 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, KeyRound, ShieldCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ClipboardList,
+  KeyRound,
+  Pause,
+  Play,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
 import type { DayKey, MatchItem } from "@/src/lib/tournament-types";
 
@@ -19,6 +28,9 @@ export default function AdminAgendaPage() {
     adminReady,
     adminError,
     authenticateAdmin,
+    toggleClock,
+    resetClock,
+    finishMatch,
   } = useTournament();
 
   const [password, setPassword] = useState("");
@@ -27,6 +39,7 @@ export default function AdminAgendaPage() {
   const [selectedCategory, setSelectedCategory] = useState("todos");
   const [selectedCourt, setSelectedCourt] = useState("todos");
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("todos");
+  const [busyGroup, setBusyGroup] = useState<string | null>(null);
 
   const filterOptions = useMemo(() => {
     const matchesForDay = matches.filter((match) => match.day === selectedDay);
@@ -50,18 +63,50 @@ export default function AdminAgendaPage() {
 
   const scheduleGroups = useMemo(() => groupMatchesByTime(visibleMatches), [visibleMatches]);
 
+  const runGroupAction = async (
+    groupKey: string,
+    groupMatches: MatchItem[],
+    action: "start" | "pause" | "reset" | "finish"
+  ) => {
+    setBusyGroup(`${groupKey}-${action}`);
+
+    try {
+      if (action === "start") {
+        const pending = groupMatches.filter((match) => match.status !== "finalizado" && !match.isRunning);
+        for (const match of pending) await toggleClock(match.id);
+      }
+
+      if (action === "pause") {
+        const running = groupMatches.filter((match) => match.status !== "finalizado" && match.isRunning);
+        for (const match of running) await toggleClock(match.id);
+      }
+
+      if (action === "reset") {
+        const editable = groupMatches.filter((match) => match.status !== "finalizado");
+        for (const match of editable) await resetClock(match.id);
+      }
+
+      if (action === "finish") {
+        const editable = groupMatches.filter((match) => match.status !== "finalizado");
+        for (const match of editable) await finishMatch(match.id);
+      }
+    } finally {
+      setBusyGroup(null);
+    }
+  };
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f6f4ee] text-[#151711]">
-      <section className="mx-auto w-full max-w-[1280px] px-4 pb-28 pt-6 md:px-8 md:pb-12">
+      <section className="mx-auto w-full max-w-[1320px] px-4 pb-28 pt-6 md:px-8 md:pb-12">
         <header className="mb-6">
           <div className="mb-5 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Panel privado</p>
+              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Mesa de control</p>
               <h1 className="max-w-4xl text-[2.55rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
-                Elegí el <span className="relative inline-block"><span className="relative z-10">partido</span><span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" /></span>
+                Carga por <span className="relative inline-block"><span className="relative z-10">tandas</span><span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" /></span>
               </h1>
-              <p className="mt-4 max-w-2xl text-base font-medium leading-7 text-[#62675d]">
-                Buscá por día, competencia, categoría, cancha y horario. Tocá “Cargar partido” para entrar a la pantalla de carga.
+              <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#62675d]">
+                Para el torneo real, trabajá por horario: cada tanda muestra las 6 canchas juntas. Desde acá podés iniciar/pausar el reloj general de esa tanda o entrar a cargar el resultado de cada partido.
               </p>
             </div>
 
@@ -111,8 +156,8 @@ export default function AdminAgendaPage() {
             <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Buscar partido</p>
-                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Agenda simple</h2>
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Buscar tanda</p>
+                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Agenda por horario y cancha</h2>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 xl:min-w-[900px]">
@@ -143,6 +188,7 @@ export default function AdminAgendaPage() {
                 >
                   Simular resultados
                 </button>
+
                 <p className="ml-auto text-xs font-black uppercase tracking-[0.14em] text-[#74786a]">{visibleMatches.length} partidos visibles</p>
               </div>
             </section>
@@ -152,26 +198,66 @@ export default function AdminAgendaPage() {
                 {scheduleGroups.length === 0 ? (
                   <p className="rounded-2xl border border-dashed border-[#ded9cc] p-8 text-center text-sm font-bold text-[#74786a]">No hay partidos con esos filtros.</p>
                 ) : (
-                  scheduleGroups.map((group) => (
-                    <section key={group.timeLabel} className="rounded-[26px] border border-[#e9e3d4] bg-[#fbfaf6] p-3 md:p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <h3 className="text-4xl font-black tracking-[-0.07em]">{group.timeLabel}</h3>
-                        <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
-                          {group.matches.length} partidos
-                        </span>
-                      </div>
+                  scheduleGroups.map((group) => {
+                    const runningCount = group.matches.filter((match) => match.isRunning).length;
+                    const finishedCount = group.matches.filter((match) => match.status === "finalizado").length;
+                    const groupKey = `${selectedDay}-${group.timeLabel}`;
 
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {group.matches.map((match) => (
-                          <MatchAgendaCard
-                            key={match.id}
-                            match={match}
-                            onOpen={() => router.push(`/admin/partido/${match.id}`)}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ))
+                    return (
+                      <section key={group.timeLabel} className="rounded-[28px] border border-[#e9e3d4] bg-[#fbfaf6] p-3 md:p-4">
+                        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#74786a]">Tanda horaria</p>
+                            <h3 className="text-5xl font-black tracking-[-0.08em]">{group.timeLabel}</h3>
+                            <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-[#74786a]">
+                              {group.matches.length} partidos · {runningCount} en juego · {finishedCount} finalizados
+                            </p>
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <BatchButton
+                              icon={Play}
+                              label="Iniciar tanda"
+                              disabled={busyGroup !== null || group.matches.every((match) => match.isRunning || match.status === "finalizado")}
+                              onClick={() => void runGroupAction(groupKey, group.matches, "start")}
+                            />
+                            <BatchButton
+                              icon={Pause}
+                              label="Pausar tanda"
+                              disabled={busyGroup !== null || group.matches.every((match) => !match.isRunning)}
+                              onClick={() => void runGroupAction(groupKey, group.matches, "pause")}
+                            />
+                            <BatchButton
+                              icon={RotateCcw}
+                              label="Reloj a 0"
+                              disabled={busyGroup !== null || group.matches.every((match) => match.status === "finalizado")}
+                              onClick={() => {
+                                if (window.confirm("Esto pone en 00:00 el reloj de todos los partidos pendientes/en juego de esta tanda. ¿Seguro?")) {
+                                  void runGroupAction(groupKey, group.matches, "reset");
+                                }
+                              }}
+                            />
+                            <BatchButton
+                              icon={CheckCircle2}
+                              label="Finalizar tanda"
+                              disabled={busyGroup !== null || group.matches.every((match) => match.status === "finalizado")}
+                              onClick={() => {
+                                if (window.confirm("Esto finaliza todos los partidos no finalizados de esta tanda. ¿Seguro?")) {
+                                  void runGroupAction(groupKey, group.matches, "finish");
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {group.matches.map((match) => (
+                            <MatchAgendaCard key={match.id} match={match} onOpen={() => router.push(`/admin/partido/${match.id}`)} />
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -217,6 +303,20 @@ function SelectLike({ label, value, options, onChange }: { label: string; value:
   );
 }
 
+function BatchButton({ icon: Icon, label, onClick, disabled }: { icon: typeof Play; label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#151711] px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
 function MatchAgendaCard({ match, onOpen }: { match: MatchItem; onOpen: () => void }) {
   const isRunning = match.status === "en_curso";
   const isFinished = match.status === "finalizado";
@@ -252,9 +352,10 @@ function MatchAgendaCard({ match, onOpen }: { match: MatchItem; onOpen: () => vo
       <button
         type="button"
         onClick={onOpen}
-        className="mt-4 w-full rounded-2xl bg-[#151711] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white"
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#151711] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-white"
       >
-        Cargar partido
+        <ClipboardList className="h-4 w-4" />
+        Cargar resultado
       </button>
     </article>
   );
@@ -279,8 +380,8 @@ function compareMatchesForAdmin(a: MatchItem, b: MatchItem) {
   return (
     timeToMinutes(a.timeLabel) - timeToMinutes(b.timeLabel) ||
     compareCourts(a.court, b.court) ||
-    compareCleanCategories(getCleanCategory(a.category), getCleanCategory(b.category)) ||
     getCompetitionFromCategory(a.category).localeCompare(getCompetitionFromCategory(b.category)) ||
+    compareCleanCategories(getCleanCategory(a.category), getCleanCategory(b.category)) ||
     a.id - b.id
   );
 }

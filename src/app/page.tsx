@@ -584,17 +584,25 @@ function TableSection({
   title: string;
   selectedSchool: string | null;
 }) {
+  const surpriseTable = useMemo(
+    () => getStableSurpriseTable(table, title),
+    [table, title],
+  );
+
   return (
     <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-8">
       <div className="mb-6">
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
           Clasificación
         </p>
-        <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">{title}</h2>
+        <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">
+          Tabla sorpresa · {title.replace("Tabla · ", "")}
+        </h2>
 
-        <div className="mt-3 flex items-center gap-2 rounded-full bg-[#f6f4ee] px-3 py-2 text-xs font-bold text-[#74786a] md:inline-flex">
-          <span className="h-3 w-3 rounded-full bg-emerald-700" />
-          Verde: clasifica a fase final
+        <div className="mt-3 rounded-[24px] border border-dashed border-[#ded9cc] bg-[#f6f4ee] px-4 py-3">
+          <p className="text-sm font-bold leading-6 text-[#74786a]">
+            Las posiciones reales están ocultas para mantener el suspenso. El orden se mezcla y queda fijo durante la sesión, así no cambia todo el tiempo.
+          </p>
         </div>
       </div>
 
@@ -615,7 +623,8 @@ function TableSection({
             <div className="text-center">P</div>
             <div className="text-center">DIF</div>
           </div>
-          {table.map((row) => {
+
+          {surpriseTable.map((row) => {
             const mine = getSchoolNameFromTeam(row.team) === selectedSchool;
 
             return (
@@ -623,41 +632,48 @@ function TableSection({
                 key={row.team}
                 className={`grid grid-cols-[44px_1fr_54px] gap-3 border-b border-[#eee9dd] p-4 last:border-b-0 md:grid-cols-[64px_1fr_70px_58px_58px_58px_58px_70px] md:items-center md:px-5 ${mine ? "bg-[#f1f0eb] shadow-[inset_4px_0_0_#151711]" : ""}`}
               >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black md:h-auto md:w-auto md:rounded-none ${row.qualifies ? "bg-emerald-700 text-white md:bg-transparent md:text-emerald-700" : "bg-[#eee9dd] text-[#74786a] md:bg-transparent"}`}
-                >
-                  {row.pos}
+                <div className="flex h-9 w-9 select-none items-center justify-center rounded-full bg-[#eee9dd] text-sm font-black text-[#74786a] blur-[2px] md:h-auto md:w-auto md:rounded-none md:bg-transparent">
+                  ?
                 </div>
+
                 <div className="flex min-w-0 items-center gap-3">
                   <TeamShield name={row.team} size="sm" />
-                  <p className="truncate text-sm font-black">
-                    {displayTeam(row.team)}
-                  </p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black">
+                      {displayTeam(row.team)}
+                    </p>
+                    {mine && (
+                      <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+                        Tu colegio
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-center text-xl font-black md:text-lg">
-                  {row.pts}
+
+                <HiddenTableValue />
+
+                <div className="hidden md:block">
+                  <HiddenTableValue />
                 </div>
-                <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
-                  {row.j}
+                <div className="hidden md:block">
+                  <HiddenTableValue />
                 </div>
-                <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
-                  {row.g}
+                <div className="hidden md:block">
+                  <HiddenTableValue />
                 </div>
-                <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
-                  {row.e}
+                <div className="hidden md:block">
+                  <HiddenTableValue />
                 </div>
-                <div className="hidden text-center text-sm font-bold text-[#74786a] md:block">
-                  {row.p}
+                <div className="hidden md:block">
+                  <HiddenTableValue />
                 </div>
-                <div className="hidden text-center text-sm font-black md:block">
-                  {row.dif}
-                </div>
+
                 <div className="col-span-3 grid grid-cols-5 rounded-2xl bg-white/70 text-center text-xs font-black text-[#74786a] md:hidden">
-                  <SmallStat label="J" value={row.j} />
-                  <SmallStat label="G" value={row.g} />
-                  <SmallStat label="E" value={row.e} />
-                  <SmallStat label="P" value={row.p} />
-                  <SmallStat label="DIF" value={row.dif} />
+                  <SmallHiddenStat label="J" />
+                  <SmallHiddenStat label="G" />
+                  <SmallHiddenStat label="E" />
+                  <SmallHiddenStat label="P" />
+                  <SmallHiddenStat label="DIF" />
                 </div>
               </div>
             );
@@ -665,6 +681,72 @@ function TableSection({
         </div>
       )}
     </section>
+  );
+}
+
+function getStableSurpriseTable(table: TableRow[], title: string) {
+  if (typeof window === "undefined") {
+    return [...table].sort((a, b) => a.team.localeCompare(b.team));
+  }
+
+  const key = `copa-apdes-tabla-sorpresa-${normalizeText(title).replace(/\s+/g, "-")}`;
+  const currentTeams = table.map((row) => row.team);
+  const rowsByTeam = new Map(table.map((row) => [row.team, row]));
+
+  try {
+    const savedRaw = window.sessionStorage.getItem(key);
+    const savedTeams = savedRaw ? (JSON.parse(savedRaw) as string[]) : [];
+
+    const validSavedTeams = savedTeams.filter((team) => rowsByTeam.has(team));
+    const newTeams = currentTeams.filter((team) => !validSavedTeams.includes(team));
+
+    const finalOrder = [
+      ...validSavedTeams,
+      ...shuffleOnce(newTeams),
+    ];
+
+    if (
+      finalOrder.length !== savedTeams.length ||
+      finalOrder.some((team, index) => team !== savedTeams[index])
+    ) {
+      window.sessionStorage.setItem(key, JSON.stringify(finalOrder));
+    }
+
+    return finalOrder
+      .map((team) => rowsByTeam.get(team))
+      .filter((row): row is TableRow => Boolean(row));
+  } catch {
+    return [...table].sort((a, b) => a.team.localeCompare(b.team));
+  }
+}
+
+function shuffleOnce<T>(items: T[]) {
+  const result = [...items];
+
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+  }
+
+  return result;
+}
+
+function HiddenTableValue() {
+  return (
+    <div className="flex justify-center">
+      <span className="inline-flex min-w-10 select-none justify-center rounded-full bg-[#e9e5da] px-3 py-1.5 text-sm font-black text-[#151711]/45 blur-[3px]">
+        88
+      </span>
+    </div>
+  );
+}
+
+function SmallHiddenStat({ label }: { label: string }) {
+  return (
+    <div className="px-2 py-2">
+      <p className="select-none blur-[3px]">88</p>
+      <p className="text-[9px] opacity-70">{label}</p>
+    </div>
   );
 }
 

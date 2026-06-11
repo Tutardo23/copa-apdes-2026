@@ -11,10 +11,22 @@ import {
 } from "@/src/lib/photos-data";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const MAX_FILES = 8;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+const ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+const HEIC_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+]);
 
 export async function GET(request: Request) {
   try {
@@ -40,8 +52,27 @@ export async function POST(request: Request) {
       return Response.json({ error: "Clave para subir fotos incorrecta." }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const files = formData.getAll("files").filter((item): item is File => item instanceof File);
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return Response.json(
+        { error: "Falta configurar BLOB_READ_WRITE_TOKEN para guardar las imágenes." },
+        { status: 400 }
+      );
+    }
+
+    let formData: FormData;
+
+    try {
+      formData = await request.formData();
+    } catch {
+      return Response.json(
+        { error: "No se pudo leer el formulario. Volvé a intentar con otra imagen." },
+        { status: 400 }
+      );
+    }
+
+    const files = formData
+      .getAll("files")
+      .filter((item): item is File => typeof item === "object" && item !== null && "size" in item && "type" in item);
 
     if (files.length === 0) {
       return Response.json({ error: "Seleccioná al menos una imagen." }, { status: 400 });
@@ -59,7 +90,22 @@ export async function POST(request: Request) {
     const created = [];
 
     for (const file of files) {
-      if (!ALLOWED_TYPES.has(file.type)) {
+      const fileType = String(file.type || "").toLowerCase();
+      const fileName = String(file.name || "foto");
+      const lowerName = fileName.toLowerCase();
+
+      if (HEIC_TYPES.has(fileType) || lowerName.endsWith(".heic") || lowerName.endsWith(".heif")) {
+        return Response.json(
+          { error: "Esa foto está en formato HEIC/HEIF. Enviála como JPG, PNG o WEBP para que se vea bien en la web." },
+          { status: 400 }
+        );
+      }
+
+      const allowedByExtension = [".jpg", ".jpeg", ".png", ".webp"].some((extension) =>
+        lowerName.endsWith(extension)
+      );
+
+      if (!ALLOWED_TYPES.has(fileType) && !allowedByExtension) {
         return Response.json(
           { error: "Solo se permiten imágenes JPG, PNG o WEBP." },
           { status: 400 }
@@ -73,8 +119,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const extension = extensionFromType(file.type);
-      const safeName = file.name.replace(/[^a-z0-9._-]/gi, "-").toLowerCase();
+      const extension = extensionFromFile(fileType, lowerName);
+      const safeName = fileName.replace(/[^a-z0-9._-]/gi, "-").toLowerCase();
       const pathname = `copa-apdes/fotos/${Date.now()}-${safeName || `foto.${extension}`}`;
 
       const blob = await put(pathname, file, {
@@ -148,7 +194,7 @@ export async function DELETE(request: Request) {
       return Response.json({ error: "La foto no existe." }, { status: 404 });
     }
 
-    await del(photo.url);
+    await del(photo.pathname || photo.url);
     await deletePhotoRecord(id);
 
     return Response.json({ ok: true });
@@ -165,21 +211,39 @@ function cleanText(value: FormDataEntryValue | null, maxLength: number) {
   return value.trim().slice(0, maxLength);
 }
 
-function extensionFromType(type: string) {
-  if (type === "image/png") return "png";
-  if (type === "image/webp") return "webp";
+function extensionFromFile(type: string, fileName: string) {
+  if (type === "image/png" || fileName.endsWith(".png")) return "png";
+  if (type === "image/webp" || fileName.endsWith(".webp")) return "webp";
   return "jpg";
 }
 
 function readableError(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
 
+  const message = error.message;
+  const normalized = message.toLowerCase();
+
   const publicMessages = [
     "Falta configurar DATABASE_URL.",
     "Falta configurar ADMIN_PASSWORD.",
     "Falta configurar PHOTO_UPLOAD_PASSWORD.",
+    "Falta configurar BLOB_READ_WRITE_TOKEN para guardar las imágenes.",
     "La foto no existe.",
   ];
 
-  return publicMessages.includes(error.message) ? error.message : fallback;
+  if (publicMessages.includes(message)) return message;
+
+  if (normalized.includes("blob") && normalized.includes("token")) {
+    return "Falta configurar BLOB_READ_WRITE_TOKEN para guardar las imágenes.";
+  }
+
+  if (normalized.includes("copa_photos") || normalized.includes("relation") || normalized.includes("does not exist")) {
+    return "Falta crear la tabla copa_photos en Neon. Ejecutá database/photos.sql.";
+  }
+
+  if (normalized.includes("payload") || normalized.includes("body") || normalized.includes("size")) {
+    return "La imagen es demasiado grande. Probá con una imagen de menos de 5 MB.";
+  }
+
+  return fallback;
 }

@@ -2,29 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Shield } from "lucide-react";
+import { Activity, CalendarDays, Images, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function BottomNav() {
   const pathname = usePathname();
 
   const links = [
-    { name: "Inicio", href: "/", icon: CalendarDays },
-    { name: "Colegio", href: "/mi-colegio", icon: Shield },
+    { name: "Inicio", href: "/", icon: CalendarDays, match: (path: string) => path === "/" },
+    { name: "Colegio", href: "/mi-colegio", icon: Shield, match: (path: string) => path === "/mi-colegio" },
+    { name: "Datos", href: "/estadisticas", icon: Activity, match: (path: string) => path === "/estadisticas" },
+    { name: "Fotos", href: "/fotos", icon: Images, match: (path: string) => path.startsWith("/fotos") },
   ];
 
   return (
     <div className="pointer-events-none fixed bottom-5 z-50 flex w-full justify-center px-4 md:hidden">
-      <nav className="pointer-events-auto flex w-full max-w-[280px] items-center justify-between rounded-[2rem] border border-[#ded9cc] bg-[#fbfaf6]/90 p-2 shadow-[0_18px_50px_rgba(21,23,17,0.18)] backdrop-blur-2xl">
+      <nav className="pointer-events-auto flex w-full max-w-[430px] items-center justify-between rounded-[2rem] border border-[#ded9cc] bg-[#fbfaf6]/90 p-2 shadow-[0_18px_50px_rgba(21,23,17,0.18)] backdrop-blur-2xl">
         {links.map((link) => {
-          const isActive = pathname === link.href;
+          const isActive = link.match(pathname);
           const Icon = link.icon;
 
           return (
             <Link
               key={link.name}
               href={link.href}
-              className={`relative flex h-14 w-[126px] items-center justify-center rounded-2xl transition ${
+              className={`relative flex h-14 flex-1 items-center justify-center rounded-2xl transition ${
                 isActive ? "text-[#151711]" : "text-[#74786a] hover:text-[#151711]"
               }`}
             >
@@ -37,8 +39,16 @@ export default function BottomNav() {
               )}
 
               <div className="relative z-10 flex flex-col items-center gap-1">
-                <Icon strokeWidth={isActive ? 2.6 : 2} className={`h-5 w-5 transition ${isActive ? "text-white" : "text-current"}`} />
-                <span className={`text-[9px] font-black uppercase tracking-[0.14em] transition ${isActive ? "text-[#d7c77a]" : "text-current"}`}>
+                <Icon
+                  strokeWidth={isActive ? 2.6 : 2}
+                  className={`h-5 w-5 transition ${isActive ? "text-white" : "text-current"}`}
+                />
+
+                <span
+                  className={`text-[8px] font-black uppercase tracking-[0.12em] transition ${
+                    isActive ? "text-[#d7c77a]" : "text-current"
+                  }`}
+                >
                   {link.name}
                 </span>
               </div>

@@ -19,6 +19,41 @@ import type { DayKey, MatchItem } from "@/src/lib/tournament-types";
 type CompetitionFilter = "todos" | "Federado" | "Colegial";
 type StatusFilter = "todos" | "por_jugar" | "en_curso" | "finalizado";
 
+type ChampionRow = {
+  school: string;
+  pts: number;
+  firstPlaces: number;
+  tablesPlayed: number;
+  j: number;
+  g: number;
+  e: number;
+  p: number;
+  gf: number;
+  gc: number;
+  dif: number;
+};
+
+type CategoryStandingRow = {
+  school: string;
+  pts: number;
+  j: number;
+  g: number;
+  e: number;
+  p: number;
+  gf: number;
+  gc: number;
+  dif: number;
+};
+
+type AdminCategoryTable = {
+  key: string;
+  title: string;
+  competition: string;
+  category: string;
+  hasResults: boolean;
+  rows: CategoryStandingRow[];
+};
+
 export default function AdminAgendaPage() {
   const router = useRouter();
   const {
@@ -62,6 +97,8 @@ export default function AdminAgendaPage() {
   }, [matches, selectedCategory, selectedCompetition, selectedCourt, selectedDay, selectedStatus]);
 
   const scheduleGroups = useMemo(() => groupMatchesByTime(visibleMatches), [visibleMatches]);
+  const championRows = useMemo(() => buildChampionTable(matches), [matches]);
+  const categoryTables = useMemo(() => buildCategoryTables(matches), [matches]);
 
   const runGroupAction = async (
     groupKey: string,
@@ -97,15 +134,15 @@ export default function AdminAgendaPage() {
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f6f4ee] text-[#151711]">
-      <section className="mx-auto w-full max-w-[1320px] px-4 pb-28 pt-6 md:px-8 md:pb-12">
-        <header className="mb-6">
-          <div className="mb-5 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+      <section className="mx-auto w-full max-w-[1320px] px-3 pb-28 pt-4 md:px-6 md:pb-10">
+        <header className="mb-4">
+          <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="mb-2 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Mesa de control</p>
-              <h1 className="max-w-4xl text-[2.55rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
+              <h1 className="max-w-4xl text-[2rem] font-black leading-[0.94] tracking-[-0.065em] md:text-5xl">
                 Carga por <span className="relative inline-block"><span className="relative z-10">tandas</span><span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" /></span>
               </h1>
-              <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#62675d]">
+              <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-[#62675d]">
                 Para el torneo real, trabajá por horario: cada tanda muestra las 6 canchas juntas. Desde acá podés iniciar/pausar el reloj general de esa tanda o entrar a cargar el resultado de cada partido.
               </p>
             </div>
@@ -139,7 +176,7 @@ export default function AdminAgendaPage() {
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               placeholder="Clave admin"
-              className="rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-4 py-3 text-sm font-bold outline-none focus:border-[#151711]"
+              className="rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-2 text-sm font-bold outline-none focus:border-[#151711]"
             />
             <button className="rounded-2xl bg-[#151711] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white">Entrar</button>
           </form>
@@ -152,12 +189,12 @@ export default function AdminAgendaPage() {
         )}
 
         {adminReady && (
-          <section className="space-y-5">
-            <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
+          <section className="space-y-4">
+            <section className="rounded-[26px] border border-[#ded9cc] bg-white/80 p-3 shadow-sm md:p-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
                   <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Buscar tanda</p>
-                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Agenda por horario y cancha</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">Agenda por horario y cancha</h2>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 xl:min-w-[900px]">
@@ -192,6 +229,10 @@ export default function AdminAgendaPage() {
                 <p className="ml-auto text-xs font-black uppercase tracking-[0.14em] text-[#74786a]">{visibleMatches.length} partidos visibles</p>
               </div>
             </section>
+
+            <AdminChampionTable rows={championRows} />
+
+            <AdminCategoryTables tables={categoryTables} />
 
             <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-3 shadow-sm md:p-5">
               <div className="space-y-4">
@@ -266,6 +307,229 @@ export default function AdminAgendaPage() {
       </section>
     </main>
   );
+}
+
+function AdminChampionTable({ rows }: { rows: ChampionRow[] }) {
+  const totalGoals = rows.reduce((sum, row) => sum + row.gf, 0);
+  const totalFinished = rows.reduce((sum, row) => sum + row.j, 0) / 2;
+  const activeTables = rows.reduce((max, row) => Math.max(max, row.tablesPlayed), 0);
+  const hasRealResults = totalFinished > 0;
+  const leader = hasRealResults ? rows[0] : null;
+
+  return (
+    <section className="rounded-[20px] border border-[#ded9cc] bg-white/90 shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-[#e8e2d5] px-3 py-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+            Campeón general
+          </p>
+          <h2 className="text-base font-black tracking-[-0.025em] text-[#151711] md:text-lg">
+            Tabla global acumulada
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <CompactPill label="Líder" value={leader?.school ?? "Sin datos"} />
+          <CompactPill label="Finalizados" value={Math.round(totalFinished)} />
+          <CompactPill label="Goles" value={totalGoals} />
+          <CompactPill label="Tablas" value={activeTables} />
+        </div>
+      </div>
+
+      <p className="px-3 pt-2 text-[11px] font-semibold leading-5 text-[#74786a]">
+        Suma los puntos de todas las categorías. <b>1°</b> indica cuántas tablas lidera cada colegio. Solo cuenta tablas con resultados finalizados.
+      </p>
+
+      {rows.length === 0 ? (
+        <p className="m-3 rounded-xl border border-dashed border-[#ded9cc] bg-[#fbfaf6] p-4 text-center text-xs font-bold text-[#74786a]">
+          La tabla general se arma cuando se finalizan partidos de grupo.
+        </p>
+      ) : (
+        <div className="mt-2 overflow-x-auto px-3 pb-3">
+          <table className="w-full min-w-[760px] border-collapse overflow-hidden rounded-xl bg-[#fbfaf6] text-left text-[11px]">
+            <thead className="bg-[#f0ede3] text-[8px] font-black uppercase tracking-[0.12em] text-[#74786a]">
+              <tr>
+                <th className="w-9 px-2 py-2 text-center">#</th>
+                <th className="min-w-[160px] px-2 py-2">Colegio</th>
+                <th className="px-2 py-2 text-center">PTS</th>
+                <th className="px-2 py-2 text-center">1°</th>
+                <th className="px-2 py-2 text-center">J</th>
+                <th className="px-2 py-2 text-center">G</th>
+                <th className="px-2 py-2 text-center">E</th>
+                <th className="px-2 py-2 text-center">P</th>
+                <th className="px-2 py-2 text-center">GF</th>
+                <th className="px-2 py-2 text-center">GC</th>
+                <th className="px-2 py-2 text-center">DIF</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={row.school} className="border-b border-[#eee9dd] last:border-b-0">
+                  <td className="px-2 py-1.5 text-center text-[10px] font-black text-[#74786a]">
+                    {index + 1}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <span className="whitespace-nowrap text-[11px] font-black uppercase text-[#151711]">
+                      {row.school}
+                    </span>
+                  </td>
+                  <CompactValue value={row.pts} strong />
+                  <CompactValue value={row.firstPlaces} strong={row.firstPlaces > 0} />
+                  <CompactValue value={row.j} />
+                  <CompactValue value={row.g} />
+                  <CompactValue value={row.e} />
+                  <CompactValue value={row.p} />
+                  <CompactValue value={row.gf} />
+                  <CompactValue value={row.gc} />
+                  <CompactValue value={formatDiff(row.dif)} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminCategoryTables({ tables }: { tables: AdminCategoryTable[] }) {
+  const [selectedKey, setSelectedKey] = useState("");
+  const selectedTable = tables.find((table) => table.key === selectedKey) ?? tables[0];
+
+  return (
+    <section className="rounded-[20px] border border-[#ded9cc] bg-white/90 shadow-sm">
+      <div className="border-b border-[#e8e2d5] px-3 py-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+              Tablas por categoría
+            </p>
+            <h2 className="text-base font-black tracking-[-0.025em] text-[#151711] md:text-lg">
+              Elegí una tabla para ver
+            </h2>
+          </div>
+
+          <span className="w-fit rounded-full bg-[#151711] px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white">
+            {tables.length} tablas
+          </span>
+        </div>
+
+        {tables.length > 0 && (
+          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+            {tables.map((table) => {
+              const active = selectedTable?.key === table.key;
+
+              return (
+                <button
+                  key={table.key}
+                  type="button"
+                  onClick={() => setSelectedKey(table.key)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition ${
+                    active
+                      ? "bg-[#151711] text-white"
+                      : "border border-[#ded9cc] bg-[#fbfaf6] text-[#74786a] hover:text-[#151711]"
+                  }`}
+                >
+                  {shortCompetition(table.competition)} · {table.category.replace("Categoría ", "Cat. ")}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {tables.length === 0 || !selectedTable ? (
+        <p className="m-3 rounded-xl border border-dashed border-[#ded9cc] bg-[#fbfaf6] p-4 text-center text-xs font-bold text-[#74786a]">
+          Las tablas aparecen cuando hay partidos cargados.
+        </p>
+      ) : (
+        <div className="px-3 pb-3 pt-2">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+                {selectedTable.competition}
+              </p>
+              <h3 className="text-sm font-black uppercase text-[#151711]">
+                {selectedTable.category}
+              </h3>
+            </div>
+
+            <span className={`rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.12em] ${
+              selectedTable.hasResults ? "bg-emerald-50 text-emerald-700" : "bg-[#f0ede3] text-[#74786a]"
+            }`}>
+              {selectedTable.hasResults ? "Con resultados" : "Sin resultados"}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-[#e6e0d3] bg-[#fbfaf6]">
+            <table className="w-full min-w-[680px] border-collapse text-left text-[11px]">
+              <thead className="bg-[#f0ede3] text-[8px] font-black uppercase tracking-[0.12em] text-[#74786a]">
+                <tr>
+                  <th className="w-9 px-2 py-2 text-center">#</th>
+                  <th className="min-w-[160px] px-2 py-2">Colegio</th>
+                  <th className="px-2 py-2 text-center">PTS</th>
+                  <th className="px-2 py-2 text-center">J</th>
+                  <th className="px-2 py-2 text-center">G</th>
+                  <th className="px-2 py-2 text-center">E</th>
+                  <th className="px-2 py-2 text-center">P</th>
+                  <th className="px-2 py-2 text-center">GF</th>
+                  <th className="px-2 py-2 text-center">GC</th>
+                  <th className="px-2 py-2 text-center">DIF</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {selectedTable.rows.map((row, index) => (
+                  <tr key={`${selectedTable.key}-${row.school}`} className="border-b border-[#eee9dd] last:border-b-0">
+                    <td className="px-2 py-1.5 text-center text-[10px] font-black text-[#74786a]">
+                      {index + 1}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <span className="whitespace-nowrap text-[11px] font-black uppercase text-[#151711]">
+                        {row.school}
+                      </span>
+                    </td>
+                    <CompactValue value={row.pts} strong />
+                    <CompactValue value={row.j} />
+                    <CompactValue value={row.g} />
+                    <CompactValue value={row.e} />
+                    <CompactValue value={row.p} />
+                    <CompactValue value={row.gf} />
+                    <CompactValue value={row.gc} />
+                    <CompactValue value={formatDiff(row.dif)} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CompactPill({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-full border border-[#ded9cc] bg-[#fbfaf6] px-2.5 py-1">
+      <span className="mr-1 text-[8px] font-black uppercase tracking-[0.12em] text-[#74786a]">
+        {label}:
+      </span>
+      <span className="text-[11px] font-black text-[#151711]">{value}</span>
+    </div>
+  );
+}
+
+function CompactValue({ value, strong = false }: { value: string | number; strong?: boolean }) {
+  return (
+    <td className={`px-2 py-1.5 text-center text-[11px] ${strong ? "font-black text-[#151711]" : "font-bold text-[#74786a]"}`}>
+      {value}
+    </td>
+  );
+}
+
+function shortCompetition(value: string) {
+  return value === "Federado" ? "Fed." : value === "Colegial" ? "Col." : value;
 }
 
 function SegmentedDay({ value, onChange }: { value: DayKey; onChange: (value: DayKey) => void }) {
@@ -360,6 +624,207 @@ function MatchAgendaCard({ match, onOpen }: { match: MatchItem; onOpen: () => vo
     </article>
   );
 }
+
+function isFinishedWithScore(match: MatchItem): match is MatchItem & { scoreA: number; scoreB: number } {
+  return match.status === "finalizado" && match.scoreA !== null && match.scoreB !== null;
+}
+
+function buildChampionTable(matches: MatchItem[]): ChampionRow[] {
+  const rows = new Map<string, ChampionRow>();
+  const groupMatches = matches.filter((match) => match.stage === "grupo");
+
+  for (const match of groupMatches) {
+    ensureChampionRow(rows, schoolNameForAdmin(match.teamA));
+    ensureChampionRow(rows, schoolNameForAdmin(match.teamB));
+
+    if (!isFinishedWithScore(match)) continue;
+
+    const teamA = ensureChampionRow(rows, schoolNameForAdmin(match.teamA));
+    const teamB = ensureChampionRow(rows, schoolNameForAdmin(match.teamB));
+
+    teamA.j += 1;
+    teamB.j += 1;
+    teamA.gf += match.scoreA;
+    teamA.gc += match.scoreB;
+    teamB.gf += match.scoreB;
+    teamB.gc += match.scoreA;
+
+    if (match.scoreA > match.scoreB) {
+      teamA.g += 1;
+      teamB.p += 1;
+      teamA.pts += 3;
+    } else if (match.scoreB > match.scoreA) {
+      teamB.g += 1;
+      teamA.p += 1;
+      teamB.pts += 3;
+    } else {
+      teamA.e += 1;
+      teamB.e += 1;
+      teamA.pts += 1;
+      teamB.pts += 1;
+    }
+
+    teamA.dif = teamA.gf - teamA.gc;
+    teamB.dif = teamB.gf - teamB.gc;
+  }
+
+  const categoryTables = buildCategoryTables(matches);
+
+  for (const table of categoryTables) {
+    if (!table.hasResults) continue;
+
+    for (const row of table.rows) {
+      const championRow = ensureChampionRow(rows, row.school);
+      championRow.tablesPlayed += 1;
+    }
+
+    const first = table.rows[0];
+    if (first) {
+      ensureChampionRow(rows, first.school).firstPlaces += 1;
+    }
+  }
+
+  return [...rows.values()].sort(
+    (a, b) =>
+      b.pts - a.pts ||
+      b.firstPlaces - a.firstPlaces ||
+      b.dif - a.dif ||
+      b.gf - a.gf ||
+      a.school.localeCompare(b.school)
+  );
+}
+
+function buildCategoryTables(matches: MatchItem[]): AdminCategoryTable[] {
+  const tablesByCategory = new Map<string, MatchItem[]>();
+  const groupMatches = matches.filter((match) => match.stage === "grupo");
+
+  for (const match of groupMatches) {
+    const competition = getCompetitionFromCategory(match.category);
+    const category = getCleanCategory(match.category);
+    const key = `${competition} · ${category}`;
+    tablesByCategory.set(key, [...(tablesByCategory.get(key) ?? []), match]);
+  }
+
+  return [...tablesByCategory.entries()]
+    .map(([key, tableMatches]) => {
+      const competition = getCompetitionFromCategory(tableMatches[0]?.category ?? "");
+      const category = getCleanCategory(tableMatches[0]?.category ?? key);
+
+      return {
+        key,
+        title: key,
+        competition,
+        category,
+        hasResults: tableMatches.some(isFinishedWithScore),
+        rows: buildCategoryStanding(tableMatches),
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.competition.localeCompare(b.competition) ||
+        compareCleanCategories(a.category, b.category)
+    );
+}
+
+function buildCategoryStanding(matches: MatchItem[]): CategoryStandingRow[] {
+  const rows = new Map<string, CategoryStandingRow>();
+
+  for (const match of matches) {
+    const teamA = ensureCategoryRow(rows, schoolNameForAdmin(match.teamA));
+    const teamB = ensureCategoryRow(rows, schoolNameForAdmin(match.teamB));
+
+    if (!isFinishedWithScore(match)) continue;
+
+    teamA.j += 1;
+    teamB.j += 1;
+    teamA.gf += match.scoreA;
+    teamA.gc += match.scoreB;
+    teamB.gf += match.scoreB;
+    teamB.gc += match.scoreA;
+
+    if (match.scoreA > match.scoreB) {
+      teamA.g += 1;
+      teamB.p += 1;
+      teamA.pts += 3;
+    } else if (match.scoreB > match.scoreA) {
+      teamB.g += 1;
+      teamA.p += 1;
+      teamB.pts += 3;
+    } else {
+      teamA.e += 1;
+      teamB.e += 1;
+      teamA.pts += 1;
+      teamB.pts += 1;
+    }
+
+    teamA.dif = teamA.gf - teamA.gc;
+    teamB.dif = teamB.gf - teamB.gc;
+  }
+
+  return [...rows.values()].sort(
+    (a, b) =>
+      b.pts - a.pts ||
+      b.dif - a.dif ||
+      b.gf - a.gf ||
+      a.school.localeCompare(b.school)
+  );
+}
+
+function ensureChampionRow(map: Map<string, ChampionRow>, school: string) {
+  if (!map.has(school)) {
+    map.set(school, {
+      school,
+      pts: 0,
+      firstPlaces: 0,
+      tablesPlayed: 0,
+      j: 0,
+      g: 0,
+      e: 0,
+      p: 0,
+      gf: 0,
+      gc: 0,
+      dif: 0,
+    });
+  }
+
+  return map.get(school)!;
+}
+
+function ensureCategoryRow(map: Map<string, CategoryStandingRow>, school: string) {
+  if (!map.has(school)) {
+    map.set(school, {
+      school,
+      pts: 0,
+      j: 0,
+      g: 0,
+      e: 0,
+      p: 0,
+      gf: 0,
+      gc: 0,
+      dif: 0,
+    });
+  }
+
+  return map.get(school)!;
+}
+
+function schoolNameForAdmin(team: string) {
+  const normalized = team.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (normalized === "lcd" || normalized.includes("candiles")) return "Los Candiles";
+  if (normalized.includes("torreon")) return "Torreón";
+  if (normalized.includes("portezuelo")) return "Portezuelo";
+  if (normalized.includes("crisol")) return "Crisol";
+  if (normalized.includes("buen ayre")) return "Buen Ayre";
+  if (normalized.includes("mirasoles")) return "Mirasoles";
+  if (normalized.includes("cerros")) return "Los Cerros";
+  return team;
+}
+
+function formatDiff(value: number) {
+  if (value > 0) return `+${value}`;
+  return String(value);
+}
+
 
 function groupMatchesByTime(matches: MatchItem[]) {
   const map = new Map<string, MatchItem[]>();

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Shield } from "lucide-react";
+import { Activity, CalendarDays, Images, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTournament } from "../providers/TournamentProvider";
 
@@ -14,8 +14,10 @@ export default function SideNav() {
   const progress = matches.length === 0 ? 0 : Math.round((completed / matches.length) * 100);
 
   const links = [
-    { name: "Inicio", href: "/", icon: CalendarDays },
-    { name: "Mi Colegio", href: "/mi-colegio", icon: Shield },
+    { name: "Inicio", href: "/", icon: CalendarDays, match: (path: string) => path === "/" },
+    { name: "Mi Colegio", href: "/mi-colegio", icon: Shield, match: (path: string) => path === "/mi-colegio" },
+    { name: "Estadísticas", href: "/estadisticas", icon: Activity, match: (path: string) => path === "/estadisticas" },
+    { name: "Fotos", href: "/fotos", icon: Images, match: (path: string) => path.startsWith("/fotos") },
   ];
 
   return (
@@ -36,7 +38,7 @@ export default function SideNav() {
 
       <nav className="flex flex-col gap-2">
         {links.map((link) => {
-          const isActive = pathname === link.href;
+          const isActive = link.match(pathname);
           const Icon = link.icon;
 
           return (
@@ -60,7 +62,9 @@ export default function SideNav() {
                   <Icon strokeWidth={isActive ? 2.6 : 2} className={`h-5 w-5 ${isActive ? "text-[#d7c77a]" : "text-[#74786a]"}`} />
                 </span>
 
-                <span className={`text-sm tracking-wide ${isActive ? "font-black" : "font-bold"}`}>{link.name}</span>
+                <span className={`text-sm tracking-wide ${isActive ? "font-black" : "font-bold"}`}>
+                  {link.name}
+                </span>
               </span>
             </Link>
           );
@@ -79,9 +83,6 @@ export default function SideNav() {
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
           <div className="h-full rounded-full bg-[#d7c77a]" style={{ width: `${progress}%` }} />
         </div>
-        <p className="mt-3 text-[10px] font-bold leading-4 text-[#74786a]">
-          Las estadísticas generales quedan reservadas para administración.
-        </p>
       </div>
     </aside>
   );

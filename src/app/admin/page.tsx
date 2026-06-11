@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   Play,
   RotateCcw,
   ShieldCheck,
+  Images,
 } from "lucide-react";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
 import type { DayKey, MatchItem } from "@/src/lib/tournament-types";
@@ -147,11 +149,23 @@ export default function AdminAgendaPage() {
               </p>
             </div>
 
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#ded9cc] bg-white/75 px-4 py-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${isLive ? "bg-emerald-600" : "bg-[#d7c77a]"}`} />
-              <span className="text-xs font-black uppercase tracking-[0.18em] text-[#74786a]">
-                {isLive ? "Conectado" : "Conectando"}
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {adminReady && (
+                <Link
+                  href="/admin/fotos"
+                  className="inline-flex items-center gap-2 rounded-full bg-[#151711] px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-white shadow-sm transition hover:scale-[1.02]"
+                >
+                  <Images className="h-4 w-4 text-[#d7c77a]" />
+                  Fotos
+                </Link>
+              )}
+
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#ded9cc] bg-white/75 px-4 py-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${isLive ? "bg-emerald-600" : "bg-[#d7c77a]"}`} />
+                <span className="text-xs font-black uppercase tracking-[0.18em] text-[#74786a]">
+                  {isLive ? "Conectado" : "Conectando"}
+                </span>
+              </div>
             </div>
           </div>
         </header>

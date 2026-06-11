@@ -39,8 +39,10 @@ export async function GET(request: Request) {
 
     return Response.json({ photos: await getPhotos({ includeAll: isAdmin }) });
   } catch (error) {
+    logPhotoError("GET", error);
+
     return Response.json(
-      { error: readableError(error, "No se pudieron cargar las fotos.") },
+      { error: readableError(error, "No se pudieron cargar las fotos."), debug: debugError(error) },
       { status: 500 }
     );
   }
@@ -63,7 +65,8 @@ export async function POST(request: Request) {
 
     try {
       formData = await request.formData();
-    } catch {
+    } catch (error) {
+      logPhotoError("FORM_DATA", error);
       return Response.json(
         { error: "No se pudo leer el formulario. Volvé a intentar con otra imagen." },
         { status: 400 }
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
 
     const files = formData
       .getAll("files")
-      .filter((item): item is File => typeof item === "object" && item !== null && "size" in item && "type" in item);
+      .filter(isFileEntry);
 
     if (files.length === 0) {
       return Response.json({ error: "Seleccioná al menos una imagen." }, { status: 400 });
@@ -123,27 +126,54 @@ export async function POST(request: Request) {
       const safeName = fileName.replace(/[^a-z0-9._-]/gi, "-").toLowerCase();
       const pathname = `copa-apdes/fotos/${Date.now()}-${safeName || `foto.${extension}`}`;
 
-      const blob = await put(pathname, file, {
-        access: "public",
-        addRandomSuffix: true,
-      });
+      let blob;
+      try {
+        blob = await put(pathname, file, {
+          access: "public",
+          addRandomSuffix: true,
+        });
+      } catch (error) {
+        logPhotoError("BLOB_PUT", error);
+        return Response.json(
+          { error: readableError(error, "No se pudo guardar la imagen en Vercel Blob."), debug: debugError(error) },
+          { status: 400 }
+        );
+      }
 
-      const photo = await createPhoto({
-        url: blob.url,
-        pathname: blob.pathname,
-        caption,
-        school,
-        category,
-        uploadedBy,
-      });
+      try {
+        const photo = await createPhoto({
+          url: blob.url,
+          pathname: blob.pathname,
+          caption,
+          school,
+          category,
+          uploadedBy,
+        });
 
-      created.push(photo);
+        created.push(photo);
+      } catch (error) {
+        logPhotoError("NEON_CREATE_PHOTO", error);
+
+        // Si falló Neon después de subir a Blob, intentamos borrar el archivo para no dejar basura.
+        try {
+          await del(blob.pathname || blob.url);
+        } catch (cleanupError) {
+          logPhotoError("BLOB_CLEANUP", cleanupError);
+        }
+
+        return Response.json(
+          { error: readableError(error, "La imagen se subió, pero no se pudo guardar el registro en Neon."), debug: debugError(error) },
+          { status: 400 }
+        );
+      }
     }
 
     return Response.json({ photos: created });
   } catch (error) {
+    logPhotoError("POST", error);
+
     return Response.json(
-      { error: readableError(error, "No se pudieron subir las fotos.") },
+      { error: readableError(error, "No se pudieron subir las fotos."), debug: debugError(error) },
       { status: 400 }
     );
   }
@@ -168,8 +198,10 @@ export async function PATCH(request: Request) {
     const photo = await updatePhotoStatus(body.id, body.status);
     return Response.json({ photo });
   } catch (error) {
+    logPhotoError("PATCH", error);
+
     return Response.json(
-      { error: readableError(error, "No se pudo actualizar la foto.") },
+      { error: readableError(error, "No se pudo actualizar la foto."), debug: debugError(error) },
       { status: 400 }
     );
   }
@@ -199,11 +231,23 @@ export async function DELETE(request: Request) {
 
     return Response.json({ ok: true });
   } catch (error) {
+    logPhotoError("DELETE", error);
+
     return Response.json(
-      { error: readableError(error, "No se pudo eliminar la foto.") },
+      { error: readableError(error, "No se pudo eliminar la foto."), debug: debugError(error) },
       { status: 400 }
     );
   }
+}
+
+function isFileEntry(item: FormDataEntryValue): item is File {
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    "size" in item &&
+    "type" in item &&
+    "name" in item
+  );
 }
 
 function cleanText(value: FormDataEntryValue | null, maxLength: number) {
@@ -215,6 +259,20 @@ function extensionFromFile(type: string, fileName: string) {
   if (type === "image/png" || fileName.endsWith(".png")) return "png";
   if (type === "image/webp" || fileName.endsWith(".webp")) return "webp";
   return "jpg";
+}
+
+function logPhotoError(scope: string, error: unknown) {
+  console.error(`[api/photos:${scope}]`, error);
+}
+
+function debugError(error: unknown) {
+  if (process.env.NODE_ENV === "production") return undefined;
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 function readableError(error: unknown, fallback: string) {
@@ -233,12 +291,33 @@ function readableError(error: unknown, fallback: string) {
 
   if (publicMessages.includes(message)) return message;
 
-  if (normalized.includes("blob") && normalized.includes("token")) {
-    return "Falta configurar BLOB_READ_WRITE_TOKEN para guardar las imágenes.";
+  if (
+    normalized.includes("blob") ||
+    normalized.includes("token") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden") ||
+    normalized.includes("invalid") && normalized.includes("access")
+  ) {
+    return "No se pudo guardar la imagen en Vercel Blob. Revisá que BLOB_READ_WRITE_TOKEN exista en .env.local y en Vercel.";
   }
 
-  if (normalized.includes("copa_photos") || normalized.includes("relation") || normalized.includes("does not exist")) {
-    return "Falta crear la tabla copa_photos en Neon. Ejecutá database/photos.sql.";
+  if (
+    normalized.includes("copa_photos") ||
+    normalized.includes("relation") ||
+    normalized.includes("does not exist") ||
+    normalized.includes("schema") ||
+    normalized.includes("column")
+  ) {
+    return "Falta crear o actualizar la tabla copa_photos en Neon. Ejecutá database/photos.sql.";
+  }
+
+  if (
+    normalized.includes("database_url") ||
+    normalized.includes("connection") ||
+    normalized.includes("neon") ||
+    normalized.includes("fetch failed")
+  ) {
+    return "No se pudo conectar con Neon. Revisá DATABASE_URL.";
   }
 
   if (normalized.includes("payload") || normalized.includes("body") || normalized.includes("size")) {

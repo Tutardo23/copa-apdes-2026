@@ -1,18 +1,39 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { MatchItem } from "@/src/lib/tournament-types";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { MatchEvent, MatchItem } from "@/src/lib/tournament-types";
+
+export type SimulatedGoal = {
+  player: string;
+};
+
+type SimulatedGoalInput = string | SimulatedGoal;
 
 type SimulatedResult = {
   scoreA: number;
   scoreB: number;
+  goalsA?: SimulatedGoal[];
+  goalsB?: SimulatedGoal[];
 };
 
 type SimulationContextType = {
   simulationEnabled: boolean;
   simulatedResults: Record<number, SimulatedResult>;
   setSimulationEnabled: (enabled: boolean) => void;
-  setSimulatedResult: (matchId: number, scoreA: number, scoreB: number) => void;
+  setSimulatedResult: (
+    matchId: number,
+    scoreA: number,
+    scoreB: number,
+    goalsA?: SimulatedGoalInput[],
+    goalsB?: SimulatedGoalInput[],
+  ) => void;
   removeSimulatedResult: (matchId: number) => void;
   clearSimulation: () => void;
   getEffectiveMatches: (matches: MatchItem[]) => MatchItem[];
@@ -31,8 +52,10 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
     try {
       const enabled = window.localStorage.getItem(ENABLED_KEY) === "true";
       const raw = window.localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+
       setSimulationEnabledState(enabled);
-      setSimulatedResults(raw ? JSON.parse(raw) : {});
+      setSimulatedResults(normalizeStoredResults(parsed));
     } catch {
       setSimulationEnabledState(false);
       setSimulatedResults({});
@@ -40,9 +63,12 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const persist = useCallback((nextResults: Record<number, SimulatedResult>, enabled = true) => {
-    setSimulatedResults(nextResults);
+    const cleanResults = normalizeStoredResults(nextResults);
+
+    setSimulatedResults(cleanResults);
     setSimulationEnabledState(enabled);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextResults));
+
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanResults));
     window.localStorage.setItem(ENABLED_KEY, String(enabled));
   }, []);
 
@@ -52,10 +78,28 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const setSimulatedResult = useCallback(
-    (matchId: number, scoreA: number, scoreB: number) => {
+    (
+      matchId: number,
+      scoreA: number,
+      scoreB: number,
+      goalsA: SimulatedGoalInput[] = [],
+      goalsB: SimulatedGoalInput[] = [],
+    ) => {
       const cleanA = Number.isFinite(scoreA) ? Math.max(0, Math.trunc(scoreA)) : 0;
       const cleanB = Number.isFinite(scoreB) ? Math.max(0, Math.trunc(scoreB)) : 0;
-      persist({ ...simulatedResults, [matchId]: { scoreA: cleanA, scoreB: cleanB } }, true);
+
+      persist(
+        {
+          ...simulatedResults,
+          [matchId]: {
+            scoreA: cleanA,
+            scoreB: cleanB,
+            goalsA: normalizeGoalInputs(goalsA).slice(0, cleanA),
+            goalsB: normalizeGoalInputs(goalsB).slice(0, cleanB),
+          },
+        },
+        true,
+      );
     },
     [persist, simulatedResults],
   );
@@ -125,8 +169,7 @@ function applySimulationAndBracket(
       scoreB: simulated.scoreB,
       status: "finalizado" as const,
       isRunning: false,
-      clockSeconds: match.clockSeconds,
-      clockStartedAt: null,
+      events: buildSimulatedEvents(match, simulated),
     };
   });
 
@@ -187,6 +230,69 @@ function applySimulationAndBracket(
   }
 
   return effective;
+}
+
+function buildSimulatedEvents(match: MatchItem, simulated: SimulatedResult): MatchEvent[] {
+  const previousNonGoalEvents = match.events.filter((event) => event.type !== "goal");
+  const goalsA = normalizeGoalInputs(simulated.goalsA ?? []);
+  const goalsB = normalizeGoalInputs(simulated.goalsB ?? []);
+
+  const goalEventsA = goalsA.slice(0, simulated.scoreA).map((goal, index): MatchEvent => ({
+    id: -Number(`${match.id}10${index + 1}`),
+    minute: Math.min(59, 5 + index * 3),
+    second: 0,
+    period: 1,
+    team: "teamA",
+    type: "goal",
+    player: goal.player || `Gol ${index + 1}`,
+  }));
+
+  const goalEventsB = goalsB.slice(0, simulated.scoreB).map((goal, index): MatchEvent => ({
+    id: -Number(`${match.id}20${index + 1}`),
+    minute: Math.min(59, 6 + index * 3),
+    second: 0,
+    period: 1,
+    team: "teamB",
+    type: "goal",
+    player: goal.player || `Gol ${index + 1}`,
+  }));
+
+  return [...previousNonGoalEvents, ...goalEventsA, ...goalEventsB].sort(
+    (a, b) => a.minute - b.minute || a.second - b.second || a.id - b.id,
+  );
+}
+
+function normalizeGoalInputs(goals: SimulatedGoalInput[]): SimulatedGoal[] {
+  return goals
+    .map((goal) => {
+      if (typeof goal === "string") return { player: goal.trim() };
+      return { player: String(goal.player ?? "").trim() };
+    })
+    .filter((goal) => goal.player.length > 0);
+}
+
+function normalizeStoredResults(value: unknown): Record<number, SimulatedResult> {
+  if (!value || typeof value !== "object") return {};
+
+  const entries = Object.entries(value as Record<string, Partial<SimulatedResult>>);
+  const next: Record<number, SimulatedResult> = {};
+
+  for (const [rawId, result] of entries) {
+    const matchId = Number(rawId);
+    if (!Number.isInteger(matchId)) continue;
+
+    const scoreA = Number(result.scoreA);
+    const scoreB = Number(result.scoreB);
+
+    next[matchId] = {
+      scoreA: Number.isFinite(scoreA) ? Math.max(0, Math.trunc(scoreA)) : 0,
+      scoreB: Number.isFinite(scoreB) ? Math.max(0, Math.trunc(scoreB)) : 0,
+      goalsA: normalizeGoalInputs((result.goalsA ?? []) as SimulatedGoalInput[]),
+      goalsB: normalizeGoalInputs((result.goalsB ?? []) as SimulatedGoalInput[]),
+    };
+  }
+
+  return next;
 }
 
 function withTeams(match: MatchItem, teamA: string, teamB: string): MatchItem {

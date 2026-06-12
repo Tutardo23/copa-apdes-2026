@@ -15,6 +15,7 @@ import {
   MatchItem,
   useTournament,
 } from "@/src/components/providers/TournamentProvider";
+import { useSimulation } from "@/src/components/providers/SimulationProvider";
 
 type Tab = "resumen" | "goleadoras" | "fairplay";
 type DayFilter = "todos" | DayKey;
@@ -22,6 +23,7 @@ type DayFilter = "todos" | DayKey;
 type TeamStats = {
   team: string;
   pts: number;
+  played: number;
   goals: number;
   against: number;
 };
@@ -41,18 +43,24 @@ type CardStat = {
 
 export default function EstadisticasPage() {
   const { matches } = useTournament();
+  const { simulationEnabled, getEffectiveMatches } = useSimulation();
 
   const [activeTab, setActiveTab] = useState<Tab>("resumen");
   const [dayFilter, setDayFilter] = useState<DayFilter>("todos");
 
+  const effectiveMatches = useMemo(
+    () => getEffectiveMatches(matches),
+    [getEffectiveMatches, matches]
+  );
+
   const filteredMatches = useMemo(
     () =>
-      matches.filter(
+      effectiveMatches.filter(
         (match) =>
           match.stage === "grupo" &&
           (dayFilter === "todos" || match.day === dayFilter)
       ),
-    [dayFilter, matches]
+    [dayFilter, effectiveMatches]
   );
 
   const { teamStats, scorers, cards, totalGoals } = useMemo(
@@ -61,7 +69,9 @@ export default function EstadisticasPage() {
   );
 
   const leader = scorers[0];
-  const bestDefense = [...teamStats].sort((a, b) => a.against - b.against)[0];
+  const bestDefense = [...teamStats]
+    .filter((team) => team.played > 0)
+    .sort((a, b) => a.against - b.against || b.pts - a.pts)[0];
   const maxGoals = Math.max(1, ...scorers.map((player) => player.goals));
 
   return (
@@ -70,6 +80,18 @@ export default function EstadisticasPage() {
         <header className="mb-7">
           <div className="mb-5 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                  Estadísticas
+                </p>
+
+                {simulationEnabled && (
+                  <span className="rounded-full bg-[#151711] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#d7c77a]">
+                    Modo simulación
+                  </span>
+                )}
+              </div>
+
               <h1 className="max-w-3xl text-[2.6rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
                 Estadísticas{" "}
                 <span className="relative inline-block">
@@ -79,8 +101,9 @@ export default function EstadisticasPage() {
               </h1>
 
               <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[#62675d]">
-                Datos en vivo por día: se recalcula automáticamente según lo
-                cargado desde el panel de administración.
+                {simulationEnabled
+                  ? "Vista simulada: se recalcula con los resultados y goleadoras de prueba guardados en este dispositivo."
+                  : "Datos en vivo por día: se recalcula automáticamente según lo cargado desde el panel de administración."}
               </p>
             </div>
 
@@ -130,6 +153,14 @@ export default function EstadisticasPage() {
           </div>
         </header>
 
+        {simulationEnabled && (
+          <section className="mb-6 rounded-[24px] border border-[#ded9cc] bg-[#151711] p-4 text-white shadow-sm">
+            <p className="text-sm font-bold leading-6 text-white/75">
+              Estás viendo estadísticas simuladas. Sirven para probar cómo quedarían las goleadoras, goles por equipo, defensas y fair play sin modificar los resultados reales.
+            </p>
+          </section>
+        )}
+
         {activeTab === "resumen" && (
           <section className="space-y-6">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -137,7 +168,7 @@ export default function EstadisticasPage() {
                 label="Goles totales"
                 value={totalGoals}
                 icon={Target}
-                detail="En el filtro seleccionado"
+                detail="Por marcador final"
               />
 
               <MetricCard
@@ -156,9 +187,9 @@ export default function EstadisticasPage() {
 
               <MetricCard
                 label="Equipos activos"
-                value={teamStats.length}
+                value={teamStats.filter((team) => team.played > 0).length}
                 icon={Trophy}
-                detail="Con partidos cargados"
+                detail="Con partidos jugados"
               />
             </div>
 
@@ -224,7 +255,13 @@ export default function EstadisticasPage() {
                     }
                   />
 
-                  <Insight text="Estas métricas se actualizan a medida que cargás resultados desde el panel de administración." />
+                  <Insight
+                    text={
+                      simulationEnabled
+                        ? "Estas métricas son de prueba y no impactan en la web real."
+                        : "Estas métricas se actualizan a medida que cargás resultados desde el panel de administración."
+                    }
+                  />
                 </div>
               </div>
             </section>
@@ -303,42 +340,51 @@ function buildStats(matches: MatchItem[]) {
   let totalGoals = 0;
 
   for (const match of matches) {
-    const scoreA = match.scoreA ?? 0;
-    const scoreB = match.scoreB ?? 0;
+    registerTeam(teamMap, match.teamA, 0, 0, false);
+    registerTeam(teamMap, match.teamB, 0, 0, false);
 
-    registerTeam(teamMap, match.teamA, scoreA, scoreB);
-    registerTeam(teamMap, match.teamB, scoreB, scoreA);
+    const hasFinishedScore =
+      match.status === "finalizado" && match.scoreA !== null && match.scoreB !== null;
 
-    if (scoreA > scoreB) {
-      teamMap.get(match.teamA)!.pts += 3;
-    } else if (scoreB > scoreA) {
-      teamMap.get(match.teamB)!.pts += 3;
-    } else if (scoreA === scoreB && (scoreA > 0 || match.status !== "por_jugar")) {
-      teamMap.get(match.teamA)!.pts += 1;
-      teamMap.get(match.teamB)!.pts += 1;
+    if (hasFinishedScore) {
+      const scoreA = match.scoreA ?? 0;
+      const scoreB = match.scoreB ?? 0;
+
+      totalGoals += scoreA + scoreB;
+
+      registerTeam(teamMap, match.teamA, scoreA, scoreB, true);
+      registerTeam(teamMap, match.teamB, scoreB, scoreA, true);
+
+      if (scoreA > scoreB) {
+        teamMap.get(match.teamA)!.pts += 3;
+      } else if (scoreB > scoreA) {
+        teamMap.get(match.teamB)!.pts += 3;
+      } else {
+        teamMap.get(match.teamA)!.pts += 1;
+        teamMap.get(match.teamB)!.pts += 1;
+      }
     }
 
     for (const event of match.events) {
       const teamName = event.team === "teamA" ? match.teamA : match.teamB;
-      const key = `${event.player}-${teamName}`;
+      const playerName = event.player.trim();
+      const key = `${playerName}-${teamName}`;
 
-      if (event.type === "goal") {
-        totalGoals += 1;
-
+      if (event.type === "goal" && playerName) {
         const prev = scorersMap.get(key);
 
         scorersMap.set(key, {
-          name: event.player,
+          name: playerName,
           team: teamName,
           goals: prev ? prev.goals + 1 : 1,
         });
       }
 
-      if (event.type === "green_card" || event.type === "yellow_card") {
+      if ((event.type === "green_card" || event.type === "yellow_card") && playerName) {
         const prevCard = cardsMap.get(key);
 
         cardsMap.set(key, {
-          name: event.player,
+          name: playerName,
           team: teamName,
           green:
             event.type === "green_card"
@@ -355,7 +401,7 @@ function buildStats(matches: MatchItem[]) {
 
   return {
     teamStats: [...teamMap.values()].sort(
-      (a, b) => b.pts - a.pts || b.goals - a.goals
+      (a, b) => b.pts - a.pts || b.goals - a.goals || a.against - b.against
     ),
     scorers: [...scorersMap.values()].sort((a, b) => b.goals - a.goals),
     cards: [...cardsMap.values()].sort(
@@ -369,12 +415,14 @@ function registerTeam(
   map: Map<string, TeamStats>,
   team: string,
   goals: number,
-  against: number
+  against: number,
+  played: boolean
 ) {
   if (!map.has(team)) {
     map.set(team, {
       team,
       pts: 0,
+      played: 0,
       goals: 0,
       against: 0,
     });
@@ -383,6 +431,7 @@ function registerTeam(
   const prev = map.get(team)!;
   prev.goals += goals;
   prev.against += against;
+  if (played) prev.played += 1;
 }
 
 function TabButton({

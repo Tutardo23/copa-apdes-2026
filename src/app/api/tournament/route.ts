@@ -21,16 +21,26 @@ export async function GET() {
     return Response.json({ matches: await getMatches() });
   } catch {
     return Response.json(
-      { error: "Falta inicializar la base. Ejecuta database/setup.sql en Neon." },
-      { status: 500 }
+      {
+        error:
+          "Falta inicializar la base. Ejecutá database/setup.sql en Neon.",
+      },
+      { status: 500 },
     );
   }
 }
 
 export async function POST(request: Request) {
   try {
-    if (!verifyAdminPassword(request.headers.get("x-admin-password"))) {
-      return Response.json({ error: "Clave de administrador incorrecta." }, { status: 401 });
+    if (
+      !verifyAdminPassword(
+        request.headers.get("x-admin-password"),
+      )
+    ) {
+      return Response.json(
+        { error: "Clave de administrador incorrecta." },
+        { status: 401 },
+      );
     }
 
     const action = (await request.json()) as TournamentAction;
@@ -47,15 +57,20 @@ export async function POST(request: Request) {
 
     if (action.action === "bulk_create_matches") {
       if (!["append", "replace"].includes(action.payload.mode)) {
-        throw new Error("Modo de carga invalido.");
+        throw new Error("Modo de carga inválido.");
       }
 
-      if (!Array.isArray(action.payload.matches) || action.payload.matches.length === 0) {
+      if (
+        !Array.isArray(action.payload.matches) ||
+        action.payload.matches.length === 0
+      ) {
         throw new Error("No hay partidos para importar.");
       }
 
       if (action.payload.matches.length > 300) {
-        throw new Error("Importa como maximo 300 partidos por vez.");
+        throw new Error(
+          "Importá como máximo 300 partidos por vez.",
+        );
       }
 
       for (const match of action.payload.matches) {
@@ -67,7 +82,10 @@ export async function POST(request: Request) {
     }
 
     if (!Number.isInteger(action.matchId)) {
-      return Response.json({ error: "Partido invalido." }, { status: 400 });
+      return Response.json(
+        { error: "Partido inválido." },
+        { status: 400 },
+      );
     }
 
     switch (action.action) {
@@ -75,28 +93,35 @@ export async function POST(request: Request) {
         validateEvent(action.payload);
         await addEvent(action.matchId, action.payload);
         break;
+
       case "undo":
         await undoLastEvent(action.matchId);
         break;
+
       case "toggle_clock":
         await toggleClock(action.matchId);
         break;
+
       case "reset_clock":
         await resetClock(action.matchId);
         break;
+
       case "reset_match":
         await resetMatch(action.matchId);
         break;
+
       case "set_final_score":
         validateFinalScore(action.payload);
         await setFinalScore(action.matchId, action.payload);
         break;
+
       case "set_period":
         if (![1, 2, 3, 4].includes(action.period)) {
-          throw new Error("Periodo invalido.");
+          throw new Error("Período inválido.");
         }
         await setPeriod(action.matchId, action.period);
         break;
+
       case "finish":
         await finishMatch(action.matchId);
         break;
@@ -105,36 +130,87 @@ export async function POST(request: Request) {
     return Response.json({ matches: await getMatches() });
   } catch (error) {
     return Response.json(
-      { error: readableError(error, "No se pudo guardar el cambio.") },
-      { status: 400 }
+      {
+        error: readableError(
+          error,
+          "No se pudo guardar el cambio.",
+        ),
+      },
+      { status: 400 },
     );
   }
 }
 
-function validateEvent(payload: Extract<TournamentAction, { action: "event" }>["payload"]) {
-  if (!["teamA", "teamB"].includes(payload.team)) throw new Error("Equipo invalido.");
-  if (!["goal", "green_card", "yellow_card"].includes(payload.type)) {
-    throw new Error("Evento invalido.");
+function validateEvent(
+  payload: Extract<
+    TournamentAction,
+    { action: "event" }
+  >["payload"],
+) {
+  if (!["teamA", "teamB"].includes(payload.team)) {
+    throw new Error("Equipo inválido.");
   }
+
+  if (
+    !["goal", "green_card", "yellow_card"].includes(payload.type)
+  ) {
+    throw new Error("Evento inválido.");
+  }
+
   if (!payload.player || payload.player.trim().length > 80) {
-    throw new Error("Jugadora invalida.");
+    throw new Error("Jugadora inválida.");
   }
 }
 
-function validateFinalScore(payload: Extract<TournamentAction, { action: "set_final_score" }>["payload"]) {
-  if (!Number.isInteger(payload.scoreA) || !Number.isInteger(payload.scoreB)) {
-    throw new Error("Marcador invalido.");
+function validateFinalScore(
+  payload: Extract<
+    TournamentAction,
+    { action: "set_final_score" }
+  >["payload"],
+) {
+  if (
+    !Number.isInteger(payload.scoreA) ||
+    !Number.isInteger(payload.scoreB)
+  ) {
+    throw new Error("Marcador inválido.");
   }
 
-  if (payload.scoreA < 0 || payload.scoreB < 0 || payload.scoreA > 99 || payload.scoreB > 99) {
-    throw new Error("Marcador invalido.");
+  if (
+    payload.scoreA < 0 ||
+    payload.scoreB < 0 ||
+    payload.scoreA > 99 ||
+    payload.scoreB > 99
+  ) {
+    throw new Error("Marcador inválido.");
+  }
+
+  if (
+    payload.penalties !== undefined &&
+    payload.penalties !== null &&
+    !/^\d{1,2}[-:]\d{1,2}$/.test(
+      payload.penalties.replace(/\s+/g, ""),
+    )
+  ) {
+    throw new Error("Marcador de penales inválido.");
   }
 }
 
-function validateMatch(payload: Extract<TournamentAction, { action: "create_match" }>["payload"]) {
-  if (!["dia1", "dia2"].includes(payload.day)) throw new Error("Dia invalido.");
-  if (!["grupo", "cuartos", "semifinal", "final"].includes(payload.stage)) {
-    throw new Error("Fase invalida.");
+function validateMatch(
+  payload: Extract<
+    TournamentAction,
+    { action: "create_match" }
+  >["payload"],
+) {
+  if (!["dia1", "dia2"].includes(payload.day)) {
+    throw new Error("Día inválido.");
+  }
+
+  if (
+    !["grupo", "cuartos", "semifinal", "final"].includes(
+      payload.stage,
+    )
+  ) {
+    throw new Error("Fase inválida.");
   }
 
   for (const field of [
@@ -145,7 +221,11 @@ function validateMatch(payload: Extract<TournamentAction, { action: "create_matc
     payload.teamA,
     payload.teamB,
   ]) {
-    if (!field || field.trim().length > 80) throw new Error("Completa todos los datos del partido.");
+    if (!field || field.trim().length > 80) {
+      throw new Error(
+        "Completá todos los datos del partido.",
+      );
+    }
   }
 
   if (payload.teamA.trim() === payload.teamB.trim()) {
@@ -159,20 +239,26 @@ function readableError(error: unknown, fallback: string) {
   const publicMessages = [
     "Falta configurar ADMIN_PASSWORD.",
     "El partido no existe.",
-    "El partido ya esta finalizado.",
-    "Periodo invalido.",
-    "Equipo invalido.",
-    "Evento invalido.",
-    "Jugadora invalida.",
-    "Marcador invalido.",
-    "Dia invalido.",
-    "Fase invalida.",
-    "Completa todos los datos del partido.",
+    "El partido ya está finalizado.",
+    "Período inválido.",
+    "Equipo inválido.",
+    "Evento inválido.",
+    "Jugadora inválida.",
+    "Marcador inválido.",
+    "Marcador de penales inválido.",
+    "Día inválido.",
+    "Fase inválida.",
+    "Completá todos los datos del partido.",
     "Los equipos deben ser distintos.",
-    "Modo de carga invalido.",
+    "Modo de carga inválido.",
     "No hay partidos para importar.",
-    "Importa como maximo 300 partidos por vez.",
+    "Importá como máximo 300 partidos por vez.",
+    "En fase final, un empate necesita definición por penales.",
+    "Los penales no pueden terminar empatados.",
+    "Cargá un resultado antes de finalizar este partido.",
   ];
 
-  return publicMessages.includes(error.message) ? error.message : fallback;
+  return publicMessages.includes(error.message)
+    ? error.message
+    : fallback;
 }

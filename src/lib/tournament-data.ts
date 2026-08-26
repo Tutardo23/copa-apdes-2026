@@ -1,9 +1,11 @@
 import "server-only";
 
 import { neon } from "@neondatabase/serverless";
+import { parsePenaltyScore } from "@/src/lib/tournament-engine";
 import type {
   BulkCreateMatchItem,
   EventType,
+  FinalScorePayload,
   MatchEvent,
   MatchItem,
   MatchStage,
@@ -51,6 +53,7 @@ function database() {
 
 export async function getMatches(): Promise<MatchItem[]> {
   const sql = database();
+
   const rows = await sql`
     SELECT
       m.id,
@@ -137,13 +140,22 @@ export function verifyAdminPassword(password: string | null) {
 
 export async function createMatch(payload: BulkCreateMatchItem) {
   const sql = database();
+
   await sql`
     INSERT INTO copa_matches (
-      day, date_label, time_label, category, court, team_a, team_b, stage, featured
+      day, date_label, time_label, category, court,
+      team_a, team_b, stage, featured
     )
     VALUES (
-      ${payload.day}, ${payload.date}, ${normalizeTimeLabel(payload.timeLabel)}, ${payload.category}, ${payload.court},
-      ${payload.teamA}, ${payload.teamB}, ${payload.stage}, ${payload.featured}
+      ${payload.day},
+      ${payload.date},
+      ${normalizeTimeLabel(payload.timeLabel)},
+      ${payload.category},
+      ${payload.court},
+      ${payload.teamA},
+      ${payload.teamB},
+      ${payload.stage},
+      ${payload.featured}
     );
   `;
 }
@@ -153,6 +165,7 @@ export async function createMatchesBulk(payload: {
   matches: BulkCreateMatchItem[];
 }) {
   const sql = database();
+
   const cleanMatches = payload.matches.map((match) => ({
     day: match.day,
     date: match.date.trim(),
@@ -169,7 +182,8 @@ export async function createMatchesBulk(payload: {
 
   const insertQuery = sql`
     INSERT INTO copa_matches (
-      day, date_label, time_label, category, court, team_a, team_b, stage, featured
+      day, date_label, time_label, category, court,
+      team_a, team_b, stage, featured
     )
     SELECT
       imported.day,
@@ -181,7 +195,9 @@ export async function createMatchesBulk(payload: {
       imported.team_b,
       imported.stage,
       imported.featured
-    FROM jsonb_to_recordset(${JSON.stringify(cleanMatches)}::jsonb) AS imported(
+    FROM jsonb_to_recordset(
+      ${JSON.stringify(cleanMatches)}::jsonb
+    ) AS imported(
       day text,
       date text,
       time_label text,
@@ -195,7 +211,10 @@ export async function createMatchesBulk(payload: {
   `;
 
   if (payload.mode === "replace") {
-    await sql.transaction([sql`DELETE FROM copa_matches;`, insertQuery]);
+    await sql.transaction([
+      sql`DELETE FROM copa_matches;`,
+      insertQuery,
+    ]);
     return;
   }
 
@@ -204,6 +223,7 @@ export async function createMatchesBulk(payload: {
 
 async function getWritableMatch(matchId: number) {
   const sql = database();
+
   const [match] = await sql`
     SELECT
       id,
@@ -211,6 +231,8 @@ async function getWritableMatch(matchId: number) {
       score_a,
       score_b,
       period,
+      stage,
+      penalties,
       (
         clock_seconds +
         CASE
@@ -233,19 +255,25 @@ async function getWritableMatch(matchId: number) {
     score_a: number | null;
     score_b: number | null;
     period: 1 | 2 | 3 | 4;
+    stage: MatchStage;
+    penalties: string | null;
     clock_seconds: number;
   };
 }
 
 export async function addEvent(
   matchId: number,
-  payload: { team: TeamKey; type: EventType; player: string }
+  payload: {
+    team: TeamKey;
+    type: EventType;
+    player: string;
+  },
 ) {
   const sql = database();
   const match = await getWritableMatch(matchId);
 
   if (match.status === "finalizado") {
-    throw new Error("El partido ya esta finalizado.");
+    throw new Error("El partido ya está finalizado.");
   }
 
   const minute = Math.floor(match.clock_seconds / 60);
@@ -253,15 +281,38 @@ export async function addEvent(
 
   await sql.transaction([
     sql`
-      INSERT INTO copa_match_events (match_id, minute, second, period, team, type, player)
-      VALUES (${matchId}, ${minute}, ${second}, ${match.period}, ${payload.team}, ${payload.type}, ${payload.player});
+      INSERT INTO copa_match_events (
+        match_id, minute, second, period, team, type, player
+      )
+      VALUES (
+        ${matchId},
+        ${minute},
+        ${second},
+        ${match.period},
+        ${payload.team},
+        ${payload.type},
+        ${payload.player}
+      );
     `,
     sql`
       UPDATE copa_matches
       SET
         status = 'en_curso',
-        score_a = COALESCE(score_a, 0) + CASE WHEN ${payload.type} = 'goal' AND ${payload.team} = 'teamA' THEN 1 ELSE 0 END,
-        score_b = COALESCE(score_b, 0) + CASE WHEN ${payload.type} = 'goal' AND ${payload.team} = 'teamB' THEN 1 ELSE 0 END,
+        score_a =
+          COALESCE(score_a, 0) +
+          CASE
+            WHEN ${payload.type} = 'goal'
+              AND ${payload.team} = 'teamA'
+            THEN 1 ELSE 0
+          END,
+        score_b =
+          COALESCE(score_b, 0) +
+          CASE
+            WHEN ${payload.type} = 'goal'
+              AND ${payload.team} = 'teamB'
+            THEN 1 ELSE 0
+          END,
+        penalties = NULL,
         updated_at = NOW()
       WHERE id = ${matchId};
     `,
@@ -270,6 +321,7 @@ export async function addEvent(
 
 export async function undoLastEvent(matchId: number) {
   const sql = database();
+
   const [event] = await sql`
     SELECT id, team, type
     FROM copa_match_events
@@ -281,12 +333,34 @@ export async function undoLastEvent(matchId: number) {
   if (!event) return;
 
   await sql.transaction([
-    sql`DELETE FROM copa_match_events WHERE id = ${event.id};`,
+    sql`
+      DELETE FROM copa_match_events
+      WHERE id = ${event.id};
+    `,
     sql`
       UPDATE copa_matches
       SET
-        score_a = GREATEST(0, COALESCE(score_a, 0) - CASE WHEN ${event.type} = 'goal' AND ${event.team} = 'teamA' THEN 1 ELSE 0 END),
-        score_b = GREATEST(0, COALESCE(score_b, 0) - CASE WHEN ${event.type} = 'goal' AND ${event.team} = 'teamB' THEN 1 ELSE 0 END),
+        score_a =
+          GREATEST(
+            0,
+            COALESCE(score_a, 0) -
+            CASE
+              WHEN ${event.type} = 'goal'
+                AND ${event.team} = 'teamA'
+              THEN 1 ELSE 0
+            END
+          ),
+        score_b =
+          GREATEST(
+            0,
+            COALESCE(score_b, 0) -
+            CASE
+              WHEN ${event.type} = 'goal'
+                AND ${event.team} = 'teamB'
+              THEN 1 ELSE 0
+            END
+          ),
+        penalties = NULL,
         updated_at = NOW()
       WHERE id = ${matchId};
     `,
@@ -295,41 +369,61 @@ export async function undoLastEvent(matchId: number) {
 
 export async function toggleClock(matchId: number) {
   const sql = database();
+
   await sql`
     UPDATE copa_matches
     SET
-      clock_seconds = clock_seconds +
+      clock_seconds =
+        clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
           ELSE 0
         END,
-      clock_started_at = CASE WHEN is_running THEN NULL ELSE NOW() END,
+      clock_started_at =
+        CASE WHEN is_running THEN NULL ELSE NOW() END,
       is_running = NOT is_running,
-      status = CASE WHEN status = 'finalizado' THEN status ELSE 'en_curso' END,
+      status =
+        CASE
+          WHEN status = 'finalizado' THEN status
+          ELSE 'en_curso'
+        END,
       updated_at = NOW()
-    WHERE id = ${matchId} AND status <> 'finalizado';
+    WHERE id = ${matchId}
+      AND status <> 'finalizado';
   `;
 }
 
 export async function resetClock(matchId: number) {
   const sql = database();
+
   await sql`
     UPDATE copa_matches
-    SET clock_seconds = 0, clock_started_at = NULL, is_running = FALSE, period = 1, updated_at = NOW()
-    WHERE id = ${matchId} AND status <> 'finalizado';
+    SET
+      clock_seconds = 0,
+      clock_started_at = NULL,
+      is_running = FALSE,
+      period = 1,
+      updated_at = NOW()
+    WHERE id = ${matchId}
+      AND status <> 'finalizado';
   `;
 }
 
 export async function resetMatch(matchId: number) {
   const sql = database();
+
   await sql.transaction([
-    sql`DELETE FROM copa_match_events WHERE match_id = ${matchId};`,
+    sql`
+      DELETE FROM copa_match_events
+      WHERE match_id = ${matchId};
+    `,
     sql`
       UPDATE copa_matches
       SET
         score_a = NULL,
         score_b = NULL,
+        penalties = NULL,
         status = 'por_jugar',
         clock_seconds = 0,
         clock_started_at = NULL,
@@ -343,16 +437,49 @@ export async function resetMatch(matchId: number) {
 
 export async function setFinalScore(
   matchId: number,
-  payload: { scoreA: number; scoreB: number; finish?: boolean }
+  payload: FinalScorePayload,
 ) {
   const sql = database();
+  const match = await getWritableMatch(matchId);
 
-  if (!Number.isInteger(payload.scoreA) || !Number.isInteger(payload.scoreB)) {
-    throw new Error("Marcador invalido.");
+  if (
+    !Number.isInteger(payload.scoreA) ||
+    !Number.isInteger(payload.scoreB)
+  ) {
+    throw new Error("Marcador inválido.");
   }
 
-  if (payload.scoreA < 0 || payload.scoreB < 0 || payload.scoreA > 99 || payload.scoreB > 99) {
-    throw new Error("Marcador invalido.");
+  if (
+    payload.scoreA < 0 ||
+    payload.scoreB < 0 ||
+    payload.scoreA > 99 ||
+    payload.scoreB > 99
+  ) {
+    throw new Error("Marcador inválido.");
+  }
+
+  let penalties: string | null = null;
+
+  if (
+    Boolean(payload.finish) &&
+    match.stage !== "grupo" &&
+    payload.scoreA === payload.scoreB
+  ) {
+    const parsed = parsePenaltyScore(payload.penalties);
+
+    if (!parsed) {
+      throw new Error(
+        "En fase final, un empate necesita definición por penales.",
+      );
+    }
+
+    if (parsed.scoreA === parsed.scoreB) {
+      throw new Error(
+        "Los penales no pueden terminar empatados.",
+      );
+    }
+
+    penalties = `${parsed.scoreA}-${parsed.scoreB}`;
   }
 
   await sql`
@@ -360,8 +487,15 @@ export async function setFinalScore(
     SET
       score_a = ${payload.scoreA},
       score_b = ${payload.scoreB},
-      status = CASE WHEN ${Boolean(payload.finish)} THEN 'finalizado' ELSE 'en_curso' END,
-      clock_seconds = clock_seconds +
+      penalties = ${penalties},
+      status =
+        CASE
+          WHEN ${Boolean(payload.finish)}
+          THEN 'finalizado'
+          ELSE 'en_curso'
+        END,
+      clock_seconds =
+        clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
@@ -374,20 +508,56 @@ export async function setFinalScore(
   `;
 }
 
-export async function setPeriod(matchId: number, period: 1 | 2 | 3 | 4) {
+export async function setPeriod(
+  matchId: number,
+  period: 1 | 2 | 3 | 4,
+) {
   const sql = database();
+
   await sql`
-    UPDATE copa_matches SET period = ${period}, updated_at = NOW()
-    WHERE id = ${matchId} AND status <> 'finalizado';
+    UPDATE copa_matches
+    SET period = ${period}, updated_at = NOW()
+    WHERE id = ${matchId}
+      AND status <> 'finalizado';
   `;
 }
 
 export async function finishMatch(matchId: number) {
   const sql = database();
+  const match = await getWritableMatch(matchId);
+
+  if (match.stage !== "grupo") {
+    if (
+      match.score_a === null ||
+      match.score_b === null
+    ) {
+      throw new Error(
+        "Cargá un resultado antes de finalizar este partido.",
+      );
+    }
+
+    if (match.score_a === match.score_b) {
+      const penalties = parsePenaltyScore(match.penalties);
+
+      if (!penalties) {
+        throw new Error(
+          "En fase final, un empate necesita definición por penales.",
+        );
+      }
+
+      if (penalties.scoreA === penalties.scoreB) {
+        throw new Error(
+          "Los penales no pueden terminar empatados.",
+        );
+      }
+    }
+  }
+
   await sql`
     UPDATE copa_matches
     SET
-      clock_seconds = clock_seconds +
+      clock_seconds =
+        clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int

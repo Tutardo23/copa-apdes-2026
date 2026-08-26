@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
-  ClipboardList,
+  Clock3,
   KeyRound,
   Pause,
   Play,
@@ -20,7 +20,13 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
-import type { MatchItem, TeamKey } from "@/src/lib/tournament-types";
+import {
+  parsePenaltyScore,
+} from "@/src/lib/tournament-engine";
+import type {
+  MatchItem,
+  TeamKey,
+} from "@/src/lib/tournament-types";
 
 type ActionType = "goal" | "green_card" | "yellow_card";
 
@@ -50,53 +56,122 @@ export default function AdminPartidoPage() {
   const [playerName, setPlayerName] = useState("");
   const [scoreAInput, setScoreAInput] = useState("0");
   const [scoreBInput, setScoreBInput] = useState("0");
-  const [modal, setModal] = useState<{ open: boolean; team: TeamKey | null; type: ActionType | null }>({
+  const [penaltyAInput, setPenaltyAInput] = useState("");
+  const [penaltyBInput, setPenaltyBInput] = useState("");
+  const [modal, setModal] = useState<{
+    open: boolean;
+    team: TeamKey | null;
+    type: ActionType | null;
+  }>({
     open: false,
     team: null,
     type: null,
   });
 
-  const match = useMemo(() => matches.find((item) => item.id === matchId), [matchId, matches]);
-  const formattedTime = formatTime(match?.clockSeconds ?? 0);
+  const match = useMemo(
+    () => matches.find((item) => item.id === matchId),
+    [matchId, matches],
+  );
+
+  const formattedTime = formatClock(match?.clockSeconds ?? 0);
 
   const sameTimeMatches = useMemo(() => {
     if (!match) return [];
+
     return matches
-      .filter((item) => item.day === match.day && normalizeTimeLabel(item.timeLabel) === normalizeTimeLabel(match.timeLabel))
+      .filter(
+        (item) =>
+          item.day === match.day &&
+          normalizeTimeLabel(item.timeLabel) ===
+            normalizeTimeLabel(match.timeLabel),
+      )
       .sort(compareMatchesForAdmin);
   }, [match, matches]);
 
   const nextSameTimeMatch = useMemo(() => {
     if (!match || sameTimeMatches.length === 0) return null;
-    const index = sameTimeMatches.findIndex((item) => item.id === match.id);
-    return sameTimeMatches.slice(index + 1).find((item) => item.status !== "finalizado") ?? null;
+
+    const index = sameTimeMatches.findIndex(
+      (item) => item.id === match.id,
+    );
+
+    return (
+      sameTimeMatches
+        .slice(index + 1)
+        .find((item) => item.status !== "finalizado") ?? null
+    );
   }, [match, sameTimeMatches]);
 
   const nextPendingMatch = useMemo(() => {
     if (!match) return null;
-    return matches
-      .filter((item) => item.status !== "finalizado" && item.id !== match.id)
-      .sort(compareMatchesForAdmin)[0] ?? null;
+
+    return (
+      matches
+        .filter(
+          (item) =>
+            item.status !== "finalizado" &&
+            item.id !== match.id,
+        )
+        .sort(compareMatchesForAdmin)[0] ?? null
+    );
   }, [match, matches]);
 
   useEffect(() => {
-    if (Number.isInteger(matchId) && matchId > 0) setActiveMatchId(matchId);
+    if (Number.isInteger(matchId) && matchId > 0) {
+      setActiveMatchId(matchId);
+    }
   }, [matchId, setActiveMatchId]);
 
   useEffect(() => {
     if (!match) return;
+
     setScoreAInput(String(match.scoreA ?? 0));
     setScoreBInput(String(match.scoreB ?? 0));
-  }, [match?.id, match?.scoreA, match?.scoreB]);
 
-  const openAction = (team: TeamKey, type: ActionType) => setModal({ open: true, team, type });
+    const penalties = parsePenaltyScore(match.penalties);
+    setPenaltyAInput(
+      penalties ? String(penalties.scoreA) : "",
+    );
+    setPenaltyBInput(
+      penalties ? String(penalties.scoreB) : "",
+    );
+  }, [
+    match?.id,
+    match?.scoreA,
+    match?.scoreB,
+    match?.penalties,
+  ]);
+
+  const scoreA = Number(scoreAInput);
+  const scoreB = Number(scoreBInput);
+  const isFinalPhase = Boolean(match && match.stage !== "grupo");
+  const needsPenalties =
+    isFinalPhase &&
+    Number.isInteger(scoreA) &&
+    Number.isInteger(scoreB) &&
+    scoreA === scoreB;
+
+  const openAction = (
+    team: TeamKey,
+    type: ActionType,
+  ) => {
+    setModal({ open: true, team, type });
+  };
+
   const closeModal = () => {
     setPlayerName("");
     setModal({ open: false, team: null, type: null });
   };
 
   const confirmAction = async () => {
-    if (!match || !modal.team || !modal.type || !playerName.trim()) return;
+    if (
+      !match ||
+      !modal.team ||
+      !modal.type ||
+      !playerName.trim()
+    ) {
+      return;
+    }
 
     const saved = await addEvent(match.id, {
       team: modal.team,
@@ -109,55 +184,67 @@ export default function AdminPartidoPage() {
 
   const saveFinalScore = async () => {
     if (!match) return;
-    const scoreA = Number(scoreAInput);
-    const scoreB = Number(scoreBInput);
 
-    if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB) || scoreA < 0 || scoreB < 0) {
-      window.alert("Revisá el marcador. Tiene que ser un número válido.");
+    if (
+      !Number.isInteger(scoreA) ||
+      !Number.isInteger(scoreB) ||
+      scoreA < 0 ||
+      scoreB < 0
+    ) {
+      window.alert(
+        "Revisá el marcador. Tiene que ser un número válido.",
+      );
       return;
     }
 
-    await setFinalScore(match.id, { scoreA, scoreB, finish: true });
+    let penalties: string | null = null;
+
+    if (needsPenalties) {
+      const penaltyA = Number(penaltyAInput);
+      const penaltyB = Number(penaltyBInput);
+
+      if (
+        !Number.isInteger(penaltyA) ||
+        !Number.isInteger(penaltyB) ||
+        penaltyA < 0 ||
+        penaltyB < 0
+      ) {
+        window.alert(
+          "Cargá el resultado de la definición por penales.",
+        );
+        return;
+      }
+
+      if (penaltyA === penaltyB) {
+        window.alert(
+          "La definición por penales tiene que tener un ganador.",
+        );
+        return;
+      }
+
+      penalties = `${penaltyA}-${penaltyB}`;
+    }
+
+    await setFinalScore(match.id, {
+      scoreA,
+      scoreB,
+      penalties,
+      finish: true,
+    });
   };
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f6f4ee] text-[#151711]">
       {modal.open && match && (
-        <div className="fixed inset-0 z-[80] flex items-end bg-[#151711]/70 px-3 pb-3 backdrop-blur-sm md:items-center md:justify-center md:p-4">
-          <section className="w-full max-w-md rounded-[30px] bg-[#f6f4ee] p-4 shadow-2xl">
-            <div className="rounded-[26px] bg-white p-5">
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#74786a]">Cargar evento</p>
-                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">{actionLabel(modal.type)}</h2>
-                  <p className="mt-2 text-sm font-bold text-[#62675d]">
-                    {modal.team === "teamA" ? match.teamA : match.teamB} · {formattedTime} · Q{match.period}
-                  </p>
-                </div>
-
-                <button onClick={closeModal} className="rounded-full bg-[#f6f4ee] p-2 text-[#74786a]" aria-label="Cerrar">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <label className="text-[11px] font-black uppercase tracking-[0.18em] text-[#74786a]">Jugadora</label>
-              <input
-                autoFocus
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-                placeholder="Nombre y apellido"
-                className="mt-2 w-full rounded-2xl border border-[#eee9dd] bg-[#fbfaf6] px-4 py-4 text-sm font-bold outline-none focus:border-[#151711]"
-              />
-              <button
-                onClick={confirmAction}
-                disabled={!playerName.trim()}
-                className="mt-3 w-full rounded-2xl bg-[#151711] px-4 py-4 text-xs font-black uppercase tracking-[0.16em] text-white disabled:opacity-40"
-              >
-                Guardar evento
-              </button>
-            </div>
-          </section>
-        </div>
+        <EventModal
+          match={match}
+          modal={modal}
+          playerName={playerName}
+          setPlayerName={setPlayerName}
+          onClose={closeModal}
+          onConfirm={confirmAction}
+          formattedTime={formattedTime}
+        />
       )}
 
       <section className="mx-auto w-full max-w-[1100px] px-4 pb-28 pt-6 md:px-8 md:pb-12">
@@ -174,7 +261,11 @@ export default function AdminPartidoPage() {
           {nextSameTimeMatch && (
             <button
               type="button"
-              onClick={() => router.push(`/admin/partido/${nextSameTimeMatch.id}`)}
+              onClick={() =>
+                router.push(
+                  `/admin/partido/${nextSameTimeMatch.id}`,
+                )
+              }
               className="inline-flex items-center gap-2 rounded-full bg-[#151711] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white shadow-sm"
             >
               Siguiente de esta hora
@@ -184,7 +275,11 @@ export default function AdminPartidoPage() {
           {nextPendingMatch && (
             <button
               type="button"
-              onClick={() => router.push(`/admin/partido/${nextPendingMatch.id}`)}
+              onClick={() =>
+                router.push(
+                  `/admin/partido/${nextPendingMatch.id}`,
+                )
+              }
               className="inline-flex items-center gap-2 rounded-full bg-[#f0ede3] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[#74786a] shadow-sm"
             >
               Siguiente pendiente
@@ -201,40 +296,50 @@ export default function AdminPartidoPage() {
             }}
           >
             <div className="flex flex-1 items-center gap-3">
-              <span className="rounded-full bg-[#151711] p-2 text-[#d7c77a]"><KeyRound className="h-5 w-5" /></span>
+              <span className="rounded-full bg-[#151711] p-2 text-[#d7c77a]">
+                <KeyRound className="h-5 w-5" />
+              </span>
               <div>
-                <p className="text-sm font-black">Acceso privado de administrador</p>
-                <p className="text-xs font-bold text-[#74786a]">Entrá con la clave admin para cargar este partido.</p>
+                <p className="text-sm font-black">
+                  Acceso privado de administrador
+                </p>
+                <p className="text-xs font-bold text-[#74786a]">
+                  Entrá con la clave admin para cargar este partido.
+                </p>
               </div>
             </div>
+
             <input
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) =>
+                setPassword(event.target.value)
+              }
               type="password"
               placeholder="Clave admin"
               className="rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-4 py-3 text-sm font-bold outline-none focus:border-[#151711]"
             />
-            <button className="rounded-2xl bg-[#151711] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white">Entrar</button>
+
+            <button className="rounded-2xl bg-[#151711] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white">
+              Entrar
+            </button>
           </form>
         )}
 
         {(connectionError || adminError) && (
           <p className="mb-5 rounded-2xl border border-[#d7c77a]/50 bg-[#f5edc9] p-3 text-sm font-bold text-[#6f6125]">
-            {adminError ?? `No se pudo conectar con Neon: ${connectionError}`}
+            {adminError ??
+              `No se pudo conectar con Neon: ${connectionError}`}
           </p>
         )}
 
         {adminReady && !match && (
           <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-8 text-center shadow-sm">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#74786a]">Partido no encontrado</p>
-            <h1 className="mt-2 text-4xl font-black tracking-[-0.07em]">No existe ese partido</h1>
-            <button
-              type="button"
-              onClick={() => router.push("/admin")}
-              className="mt-5 rounded-2xl bg-[#151711] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-white"
-            >
-              Volver a agenda
-            </button>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#74786a]">
+              Partido no encontrado
+            </p>
+            <h1 className="mt-2 text-4xl font-black tracking-[-0.07em]">
+              No existe ese partido
+            </h1>
           </section>
         )}
 
@@ -244,17 +349,64 @@ export default function AdminPartidoPage() {
 
             <section className="grid gap-5 lg:grid-cols-[1fr_0.95fr]">
               <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
-                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Carga desde mesa</p>
-                <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Resultado final</h2>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                  Carga desde mesa
+                </p>
+                <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">
+                  Resultado final
+                </h2>
                 <p className="mt-2 text-sm font-bold leading-6 text-[#62675d]">
-                  Pensado para cuando el árbitro trae el papel a mesa: cargás el marcador final y el partido queda finalizado.
+                  Cargá el marcador del partido. Si una definición termina empatada,
+                  el sistema te pide automáticamente el resultado por penales.
                 </p>
 
                 <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-                  <ScoreInput label={match.teamA} value={scoreAInput} onChange={setScoreAInput} />
-                  <span className="pb-4 text-3xl font-black text-[#d7c77a]">:</span>
-                  <ScoreInput label={match.teamB} value={scoreBInput} onChange={setScoreBInput} />
+                  <ScoreInput
+                    label={match.teamA}
+                    value={scoreAInput}
+                    onChange={setScoreAInput}
+                  />
+                  <span className="pb-4 text-3xl font-black text-[#d7c77a]">
+                    :
+                  </span>
+                  <ScoreInput
+                    label={match.teamB}
+                    value={scoreBInput}
+                    onChange={setScoreBInput}
+                  />
                 </div>
+
+                {needsPenalties && (
+                  <section className="mt-4 rounded-[24px] border border-[#d7c77a]/50 bg-[#fff8dc] p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Target className="h-4 w-4 text-[#6f6125]" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6f6125]">
+                        Definición por penales
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+                      <ScoreInput
+                        label={match.teamA}
+                        value={penaltyAInput}
+                        onChange={setPenaltyAInput}
+                      />
+                      <span className="pb-4 text-2xl font-black text-[#9c8737]">
+                        :
+                      </span>
+                      <ScoreInput
+                        label={match.teamB}
+                        value={penaltyBInput}
+                        onChange={setPenaltyBInput}
+                      />
+                    </div>
+
+                    <p className="mt-3 text-xs font-bold leading-5 text-[#6f6125]">
+                      El marcador del partido queda empatado y los penales definen
+                      quién avanza o gana el puesto.
+                    </p>
+                  </section>
+                )}
 
                 <button
                   type="button"
@@ -262,23 +414,39 @@ export default function AdminPartidoPage() {
                   className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#151711] px-4 py-4 text-xs font-black uppercase tracking-[0.16em] text-white"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  Guardar resultado final
+                  {needsPenalties
+                    ? "Guardar resultado y penales"
+                    : "Guardar resultado final"}
                 </button>
               </section>
 
               <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
                 <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Cronómetro</p>
-                    <h2 className="mt-1 text-5xl font-black tracking-[-0.08em]">{formattedTime}</h2>
+                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                      Cronómetro
+                    </p>
+                    <h2 className="mt-1 text-5xl font-black tracking-[-0.08em]">
+                      {formattedTime}
+                    </h2>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     {[1, 2, 3, 4].map((period) => (
                       <button
                         key={period}
-                        onClick={() => setPeriod(match.id, period as 1 | 2 | 3 | 4)}
-                        className={`rounded-full px-4 py-2 text-xs font-black ${match.period === period ? "bg-[#151711] text-white" : "bg-[#f6f4ee] text-[#74786a]"}`}
+                        onClick={() =>
+                          setPeriod(
+                            match.id,
+                            period as 1 | 2 | 3 | 4,
+                          )
+                        }
+                        disabled={match.status === "finalizado"}
+                        className={`rounded-full px-4 py-2 text-xs font-black disabled:opacity-40 ${
+                          match.period === period
+                            ? "bg-[#151711] text-white"
+                            : "bg-[#f6f4ee] text-[#74786a]"
+                        }`}
                       >
                         Q{period}
                       </button>
@@ -287,15 +455,39 @@ export default function AdminPartidoPage() {
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <ActionBtn onClick={() => toggleClock(match.id)} icon={match.isRunning ? Pause : Play} label={match.isRunning ? "Pausar" : "Iniciar"} />
-                  <ActionBtn onClick={() => resetClock(match.id)} icon={RotateCcw} label="Reloj a 0" />
-                  <ActionBtn onClick={() => undoLastEvent(match.id)} icon={Undo2} label="Deshacer" />
-                  <ActionBtn onClick={() => finishMatch(match.id)} icon={CheckCircle2} label="Finalizar" />
+                  <ActionBtn
+                    onClick={() => void toggleClock(match.id)}
+                    icon={match.isRunning ? Pause : Play}
+                    label={match.isRunning ? "Pausar" : "Iniciar"}
+                    disabled={match.status === "finalizado"}
+                  />
+                  <ActionBtn
+                    onClick={() => void resetClock(match.id)}
+                    icon={RotateCcw}
+                    label="Reloj a 0"
+                    disabled={match.status === "finalizado"}
+                  />
+                  <ActionBtn
+                    onClick={() => void undoLastEvent(match.id)}
+                    icon={Undo2}
+                    label="Deshacer"
+                    disabled={match.events.length === 0}
+                  />
+                  <ActionBtn
+                    onClick={() => void finishMatch(match.id)}
+                    icon={CheckCircle2}
+                    label="Finalizar"
+                    disabled={match.status === "finalizado"}
+                  />
                 </div>
 
                 <button
                   onClick={() => {
-                    if (window.confirm("Esto borra eventos, goles y deja el partido como pendiente. ¿Seguro?")) {
+                    if (
+                      window.confirm(
+                        "Esto borra eventos, goles, penales y deja el partido como pendiente. ¿Seguro?",
+                      )
+                    ) {
                       void resetMatch(match.id);
                     }
                   }}
@@ -308,48 +500,34 @@ export default function AdminPartidoPage() {
             </section>
 
             <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Carga detallada opcional</p>
-              <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Eventos</h2>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+                Carga detallada opcional
+              </p>
+              <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">
+                Eventos
+              </h2>
               <p className="mt-2 text-sm font-bold leading-6 text-[#62675d]">
-                Usalo si quieren registrar goleadoras o tarjetas por jugadora. Si solo necesitan resultado final, alcanza con la carga desde mesa.
+                Usalo si quieren registrar goleadoras o tarjetas por jugadora.
+                Si solo necesitan resultado final, alcanza con la carga desde mesa.
               </p>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <TeamEventPanel team="teamA" name={match.teamA} onAction={openAction} />
-                <TeamEventPanel team="teamB" name={match.teamB} onAction={openAction} />
+                <TeamEventPanel
+                  team="teamA"
+                  name={match.teamA}
+                  onAction={openAction}
+                  disabled={match.status === "finalizado"}
+                />
+                <TeamEventPanel
+                  team="teamB"
+                  name={match.teamB}
+                  onAction={openAction}
+                  disabled={match.status === "finalizado"}
+                />
               </div>
             </section>
 
-            <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">Timeline</p>
-                  <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">Registro</h2>
-                </div>
-                <span className="rounded-full bg-[#f0ede3] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
-                  {match.events.length} eventos
-                </span>
-              </div>
-
-              {match.events.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[#ded9cc] p-6 text-center text-sm font-bold text-[#74786a]">Sin eventos.</p>
-              ) : (
-                <div className="space-y-2">
-                  {match.events.map((event) => (
-                    <div key={event.id} className="flex items-center gap-4 rounded-2xl bg-[#fbfaf6] p-4">
-                      <span className="w-10 text-right text-sm font-black text-[#74786a]">{event.minute}&apos;</span>
-                      <EventIcon type={event.type} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black">{event.player}</p>
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
-                          {event.team === "teamA" ? match.teamA : match.teamB}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+            <EventsSection match={match} />
           </section>
         )}
       </section>
@@ -357,158 +535,353 @@ export default function AdminPartidoPage() {
   );
 }
 
+function EventModal({
+  match,
+  modal,
+  playerName,
+  setPlayerName,
+  onClose,
+  onConfirm,
+  formattedTime,
+}: {
+  match: MatchItem;
+  modal: {
+    open: boolean;
+    team: TeamKey | null;
+    type: ActionType | null;
+  };
+  playerName: string;
+  setPlayerName: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  formattedTime: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end bg-[#151711]/70 px-3 pb-3 backdrop-blur-sm md:items-center md:justify-center md:p-4">
+      <section className="w-full max-w-md rounded-[30px] bg-[#f6f4ee] p-4 shadow-2xl">
+        <div className="rounded-[26px] bg-white p-5">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#74786a]">
+                Cargar evento
+              </p>
+              <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">
+                {actionLabel(modal.type)}
+              </h2>
+              <p className="mt-2 text-sm font-bold text-[#62675d]">
+                {modal.team === "teamA"
+                  ? match.teamA
+                  : match.teamB}{" "}
+                · {formattedTime} · Q{match.period}
+              </p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="rounded-full bg-[#f6f4ee] p-2 text-[#74786a]"
+              aria-label="Cerrar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <label className="text-[11px] font-black uppercase tracking-[0.18em] text-[#74786a]">
+            Jugadora
+          </label>
+          <input
+            autoFocus
+            value={playerName}
+            onChange={(event) =>
+              setPlayerName(event.target.value)
+            }
+            placeholder="Nombre y apellido"
+            className="mt-2 w-full rounded-2xl border border-[#eee9dd] bg-[#fbfaf6] px-4 py-4 text-sm font-bold outline-none focus:border-[#151711]"
+          />
+
+          <button
+            onClick={onConfirm}
+            disabled={!playerName.trim()}
+            className="mt-3 w-full rounded-2xl bg-[#151711] px-4 py-4 text-xs font-black uppercase tracking-[0.16em] text-white disabled:opacity-40"
+          >
+            Guardar evento
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function Scoreboard({ match }: { match: MatchItem }) {
   return (
-    <section className="relative overflow-hidden rounded-[34px] bg-[#151711] p-5 text-white shadow-[0_22px_70px_rgba(21,23,17,0.25)] md:p-8">
-      <div className="absolute inset-4 rounded-[28px] border border-white/10" />
-      <div className="relative z-10 mb-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#d7c77a]">
-          {dayLabel(match.day)} · {getCompetitionFromCategory(match.category)} · {getCleanCategory(match.category)} · {shortCourt(match.court)}
-        </p>
-        <span className="rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white/70">
-          {statusLabel(match.status)}
-        </span>
+    <section className="relative overflow-hidden rounded-[34px] bg-[#151711] p-5 text-white shadow-[0_22px_55px_rgba(21,23,17,0.18)] md:p-7">
+      <div className="absolute inset-0 opacity-25">
+        <div className="absolute inset-4 rounded-[28px] border border-white/20" />
+        <div className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
+        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
       </div>
 
-      <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <ScoreTeam name={match.teamA} />
-        <div className="text-center">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Marcador</p>
-          <p className="text-6xl font-black tracking-[-0.08em] text-[#d7c77a]">
-            {match.scoreA ?? "-"}<span className="text-white">:</span>{match.scoreB ?? "-"}
-          </p>
+      <div className="relative z-10">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#d7c77a]">
+              {match.category}
+            </p>
+            <p className="mt-1 text-xs font-bold text-white/45">
+              {match.court} · {displayTime(match.timeLabel)}
+            </p>
+          </div>
+
+          <span className="rounded-full bg-white/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/65">
+            {statusLabel(match.status)}
+          </span>
         </div>
-        <ScoreTeam name={match.teamB} align="right" />
+
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <ScoreTeam name={match.teamA} />
+          <div className="text-center">
+            <p className="text-5xl font-black tracking-[-0.08em] md:text-7xl">
+              {match.scoreA ?? 0}
+              <span className="mx-2 text-[#d7c77a]">:</span>
+              {match.scoreB ?? 0}
+            </p>
+
+            {match.penalties && (
+              <p className="mt-2 rounded-full bg-[#d7c77a] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#151711]">
+                Penales {match.penalties.replace("-", " : ")}
+              </p>
+            )}
+          </div>
+          <ScoreTeam name={match.teamB} align="right" />
+        </div>
       </div>
     </section>
   );
 }
 
-function ScoreTeam({ name, align = "left" }: { name: string; align?: "left" | "right" }) {
+function ScoreTeam({
+  name,
+  align = "left",
+}: {
+  name: string;
+  align?: "left" | "right";
+}) {
+  const crest = getSchoolShield(name);
+
   return (
-    <div className={`flex min-w-0 flex-col items-center gap-3 ${align === "right" ? "text-right" : "text-left"}`}>
-      <TeamShield name={name} size="lg" />
-      <p className="max-w-[150px] truncate text-sm font-black uppercase tracking-[0.14em] text-white">{name}</p>
+    <div
+      className={`flex min-w-0 flex-col gap-2 ${
+        align === "right"
+          ? "items-end text-right"
+          : "items-start"
+      }`}
+    >
+      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white md:h-16 md:w-16">
+        {crest ? (
+          <Image
+            src={crest}
+            alt=""
+            width={72}
+            height={72}
+            className="h-full w-full object-contain p-1.5"
+          />
+        ) : (
+          <ShieldCheck className="h-6 w-6 text-[#151711]" />
+        )}
+      </div>
+      <p className="max-w-[180px] truncate text-sm font-black uppercase tracking-[0.04em] md:text-base">
+        {name}
+      </p>
     </div>
   );
 }
 
-function ScoreInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function ScoreInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
-    <label className="block">
-      <span className="mb-2 block truncate text-center text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">{label}</span>
+    <label className="block min-w-0">
+      <span className="mb-2 block truncate text-[10px] font-black uppercase tracking-[0.12em] text-[#74786a]">
+        {label}
+      </span>
       <input
-        inputMode="numeric"
+        type="number"
+        min={0}
+        max={99}
         value={value}
-        onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 2))}
-        className="w-full rounded-[24px] border border-[#ded9cc] bg-[#fbfaf6] px-4 py-5 text-center text-5xl font-black tracking-[-0.08em] outline-none focus:border-[#151711]"
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-4 text-center text-3xl font-black outline-none focus:border-[#151711]"
       />
     </label>
   );
 }
 
-function TeamEventPanel({ team, name, onAction }: { team: TeamKey; name: string; onAction: (team: TeamKey, type: ActionType) => void }) {
+function ActionBtn({
+  onClick,
+  icon: Icon,
+  label,
+  disabled = false,
+}: {
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
-    <section className="rounded-[26px] border border-[#ded9cc] bg-[#fbfaf6] p-4">
-      <div className="mb-4 flex items-center gap-3">
-        <TeamShield name={name} />
-        <h3 className="truncate text-lg font-black">{name}</h3>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <EventBtn label="Gol" icon={Target} onClick={() => onAction(team, "goal")} />
-        <EventBtn label="Verde" icon={Square} onClick={() => onAction(team, "green_card")} tone="green" />
-        <EventBtn label="Amarilla" icon={Square} onClick={() => onAction(team, "yellow_card")} tone="yellow" />
-      </div>
-    </section>
-  );
-}
-
-function ActionBtn({ onClick, icon: Icon, label }: { onClick: () => void; icon: LucideIcon; label: string }) {
-  return (
-    <button onClick={onClick} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#151711] px-4 py-4 text-xs font-black uppercase tracking-[0.16em] text-white">
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#151711] px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
+    >
       <Icon className="h-4 w-4" />
       {label}
     </button>
   );
 }
 
-function EventBtn({ label, icon: Icon, onClick, tone = "dark" }: { label: string; icon: LucideIcon; onClick: () => void; tone?: "dark" | "green" | "yellow" }) {
-  const toneClass = tone === "green" ? "bg-emerald-50 text-emerald-700" : tone === "yellow" ? "bg-[#f5edc9] text-[#7a6618]" : "bg-[#151711] text-white";
-
+function TeamEventPanel({
+  team,
+  name,
+  onAction,
+  disabled,
+}: {
+  team: TeamKey;
+  name: string;
+  onAction: (team: TeamKey, type: ActionType) => void;
+  disabled: boolean;
+}) {
   return (
-    <button onClick={onClick} className={`inline-flex flex-col items-center justify-center gap-1 rounded-2xl px-3 py-4 text-[10px] font-black uppercase tracking-[0.14em] ${toneClass}`}>
-      <Icon className={`h-4 w-4 ${tone === "green" ? "fill-emerald-600" : tone === "yellow" ? "fill-[#d7c77a]" : ""}`} />
+    <article className="rounded-[24px] border border-[#e8e2d5] bg-[#fbfaf6] p-4">
+      <p className="truncate text-sm font-black">{name}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <EventButton
+          disabled={disabled}
+          label="Gol"
+          icon={Target}
+          onClick={() => onAction(team, "goal")}
+        />
+        <EventButton
+          disabled={disabled}
+          label="Verde"
+          icon={Square}
+          onClick={() => onAction(team, "green_card")}
+          green
+        />
+        <EventButton
+          disabled={disabled}
+          label="Amarilla"
+          icon={Square}
+          onClick={() => onAction(team, "yellow_card")}
+          yellow
+        />
+      </div>
+    </article>
+  );
+}
+
+function EventButton({
+  label,
+  icon: Icon,
+  onClick,
+  disabled,
+  green,
+  yellow,
+}: {
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  disabled: boolean;
+  green?: boolean;
+  yellow?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-[#ded9cc] bg-white px-2 py-3 text-[9px] font-black uppercase tracking-[0.1em] text-[#62675d] disabled:opacity-35"
+    >
+      <Icon
+        className={`h-4 w-4 ${
+          green
+            ? "fill-emerald-600 text-emerald-600"
+            : yellow
+              ? "fill-amber-400 text-amber-400"
+              : "text-[#151711]"
+        }`}
+      />
       {label}
     </button>
   );
 }
 
-function EventIcon({ type }: { type: ActionType }) {
+function EventsSection({ match }: { match: MatchItem }) {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white">
-      {type === "goal" && <Target className="h-5 w-5" />}
-      {type === "green_card" && <Square className="h-4 w-4 fill-emerald-600 text-emerald-600" />}
-      {type === "yellow_card" && <Square className="h-4 w-4 fill-[#d7c77a] text-[#d7c77a]" />}
-    </div>
+    <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+            Registro
+          </p>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+            Eventos del partido
+          </h2>
+        </div>
+        <Clock3 className="h-5 w-5 text-[#74786a]" />
+      </div>
+
+      {match.events.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-[#ded9cc] bg-[#fbfaf6] p-6 text-center text-sm font-bold text-[#74786a]">
+          Todavía no hay eventos cargados.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {[...match.events]
+            .sort(
+              (a, b) =>
+                b.minute - a.minute ||
+                b.second - a.second ||
+                b.id - a.id,
+            )
+            .map((event) => (
+              <div
+                key={event.id}
+                className="grid grid-cols-[56px_1fr_auto] items-center gap-3 rounded-2xl bg-[#fbfaf6] p-3"
+              >
+                <span className="text-right text-xs font-black text-[#74786a]">
+                  {event.minute}&apos;
+                  {String(event.second).padStart(2, "0")}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black">
+                    {event.player}
+                  </p>
+                  <p className="truncate text-[9px] font-black uppercase tracking-[0.13em] text-[#74786a]">
+                    {event.team === "teamA"
+                      ? match.teamA
+                      : match.teamB}{" "}
+                    · Q{event.period}
+                  </p>
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-[0.12em] text-[#62675d]">
+                  {event.type === "goal"
+                    ? "Gol"
+                    : event.type === "green_card"
+                      ? "Verde"
+                      : "Amarilla"}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+    </section>
   );
-}
-
-function compareMatchesForAdmin(a: MatchItem, b: MatchItem) {
-  return (
-    dayOrder(a.day) - dayOrder(b.day) ||
-    timeToMinutes(a.timeLabel) - timeToMinutes(b.timeLabel) ||
-    compareCourts(a.court, b.court) ||
-    getCompetitionFromCategory(a.category).localeCompare(getCompetitionFromCategory(b.category)) ||
-    categoryNumber(getCleanCategory(a.category)) - categoryNumber(getCleanCategory(b.category)) ||
-    a.id - b.id
-  );
-}
-
-function dayOrder(day: string) {
-  return day === "dia1" ? 1 : 2;
-}
-
-function compareCourts(a: string, b: string) {
-  return courtNumber(a) - courtNumber(b) || a.localeCompare(b);
-}
-
-function categoryNumber(value: string) {
-  const match = value.match(/categor[ií]a\s*(\d+)/i);
-  return match ? Number(match[1]) : 99;
-}
-
-function courtNumber(value: string) {
-  const match = value.match(/cancha\s*(\d+)/i);
-  return match ? Number(match[1]) : 99;
-}
-
-function timeToMinutes(value: string) {
-  const match = normalizeTimeLabel(value).match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return 9999;
-  return Number(match[1]) * 60 + Number(match[2]);
-}
-
-function normalizeTimeLabel(value?: string) {
-  return (value ?? "")
-    .trim()
-    .replace(/^(\d{1,2}),(\d{2})(.*)$/g, "$1:$2$3")
-    .replace(/\s*hs?\.?$/i, " hs");
-}
-
-function formatTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
-  const secs = (seconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${secs}`;
-}
-
-function dayLabel(day: string) {
-  return day === "dia1" ? "Día 1" : "Día 2";
-}
-
-function statusLabel(status: string) {
-  if (status === "en_curso") return "En juego";
-  if (status === "finalizado") return "Finalizado";
-  return "Pendiente";
 }
 
 function actionLabel(type: ActionType | null) {
@@ -518,55 +891,73 @@ function actionLabel(type: ActionType | null) {
   return "Evento";
 }
 
-function shortCourt(value: string) {
-  return value.replace(/\s*\((.*?)\)/g, "").trim();
+function statusLabel(status: MatchItem["status"]) {
+  if (status === "finalizado") return "Finalizado";
+  if (status === "en_curso") return "En juego";
+  return "Pendiente";
 }
 
-function getCleanCategory(category: string) {
-  return category.replace(/\s*(federado|colegial)\s*$/i, "").trim();
+function formatClock(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
-function getCompetitionFromCategory(category: string) {
-  const normalized = category.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (normalized.includes("federado")) return "Federado";
-  if (normalized.includes("colegial")) return "Colegial";
-  return "General";
+function normalizeTimeLabel(value: string) {
+  return value
+    .trim()
+    .replace(/^(\d{1,2}),(\d{2})(.*)$/g, "$1:$2$3")
+    .replace(/\s*hs?\.?$/i, " hs");
+}
+
+function displayTime(value: string) {
+  return normalizeTimeLabel(value);
+}
+
+function timeToMinutes(value: string) {
+  const match = normalizeTimeLabel(value).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 9999;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function courtNumber(value: string) {
+  const match = value.match(/\d+/);
+  return match ? Number(match[0]) : 99;
+}
+
+function compareMatchesForAdmin(a: MatchItem, b: MatchItem) {
+  return (
+    (a.day === "dia1" ? 1 : 2) -
+      (b.day === "dia1" ? 1 : 2) ||
+    timeToMinutes(a.timeLabel) - timeToMinutes(b.timeLabel) ||
+    courtNumber(a.court) - courtNumber(b.court) ||
+    a.id - b.id
+  );
 }
 
 function getSchoolShield(name: string) {
-  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (normalized.includes("portezuelo")) return "/escudos/portezuelo.png";
-  if (normalized.includes("torreon")) return "/escudos/torreon.png";
-  if (normalized.includes("lcd") || normalized.includes("candiles")) return "/escudos/los-candiles.png";
-  if (normalized.includes("crisol")) return "/escudos/crisol.png";
-  if (normalized.includes("buen ayre")) return "/escudos/buen-ayre.png";
-  if (normalized.includes("mirasoles")) return "/escudos/mirasoles.png";
-  if (normalized.includes("cerros")) return "/escudos/los-cerros.png";
+  const normalized = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (normalized.includes("portezuelo"))
+    return "/escudos/portezuelo.png";
+  if (normalized.includes("torreon"))
+    return "/escudos/torreon.png";
+  if (
+    normalized.includes("lcd") ||
+    normalized.includes("candiles")
+  )
+    return "/escudos/los-candiles.png";
+  if (normalized.includes("crisol"))
+    return "/escudos/crisol.png";
+  if (normalized.includes("buen ayre"))
+    return "/escudos/buen-ayre.png";
+  if (normalized.includes("mirasoles"))
+    return "/escudos/mirasoles.png";
+  if (normalized.includes("cerros"))
+    return "/escudos/los-cerros.png";
+
   return null;
-}
-
-function getInitials(name: string) {
-  return name
-    .replace(/[^a-zA-ZÁÉÍÓÚÜÑáéíóúüñ ]/g, "")
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-function TeamShield({ name, size = "sm" }: { name: string; size?: "sm" | "lg" }) {
-  const src = getSchoolShield(name);
-  const sizeClass = size === "lg" ? "h-16 w-16 md:h-20 md:w-20" : "h-10 w-10";
-
-  return (
-    <div className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ded9cc] bg-white`}>
-      {src ? (
-        <Image src={src} alt={`Escudo de ${name}`} width={96} height={96} className="h-full w-full object-contain p-1.5" />
-      ) : (
-        <span className="text-[9px] font-black text-[#151711]"><ShieldCheck className="mx-auto h-3 w-3" />{getInitials(name)}</span>
-      )}
-    </div>
-  );
 }

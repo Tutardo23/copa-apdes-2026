@@ -10,8 +10,6 @@ export default function SideNav() {
   const pathname = usePathname();
   const { matches } = useTournament();
   const inProgress = matches.filter((match) => match.status === "en_curso").length;
-  const completed = matches.filter((match) => match.status === "finalizado").length;
-  const progress = matches.length === 0 ? 0 : Math.round((completed / matches.length) * 100);
 
   const links = [
     { name: "Inicio", href: "/", icon: CalendarDays, match: (path: string) => path === "/" },
@@ -71,19 +69,22 @@ export default function SideNav() {
         })}
       </nav>
 
-      <div className="mt-auto rounded-[26px] border border-[#ded9cc] bg-white/65 p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#74786a]">Estado</p>
-        <p className="mt-2 text-sm font-black text-[#151711]">
-          {inProgress > 0
-            ? `${inProgress} partido${inProgress === 1 ? "" : "s"} en juego`
-            : matches.length > 0
-              ? `${matches.length} partidos cargados`
-              : "Sin partidos cargados"}
-        </p>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
-          <div className="h-full rounded-full bg-[#d7c77a]" style={{ width: `${progress}%` }} />
+      {inProgress > 0 && (
+        <div className="mt-auto rounded-[24px] border border-emerald-200 bg-emerald-50/90 p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-50" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-600" />
+            </span>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-800">
+              En vivo
+            </p>
+          </div>
+          <p className="mt-2 text-sm font-black text-[#151711]">
+            {inProgress} partido{inProgress === 1 ? "" : "s"} en juego
+          </p>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

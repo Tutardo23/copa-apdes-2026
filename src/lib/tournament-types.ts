@@ -47,6 +47,13 @@ export type BulkCreateMatchItem = {
   featured: boolean;
 };
 
+export type FinalScorePayload = {
+  scoreA: number;
+  scoreB: number;
+  finish?: boolean;
+  penalties?: string | null;
+};
+
 export type TournamentAction =
   | {
       action: "create_match";
@@ -67,7 +74,7 @@ export type TournamentAction =
   | {
       action: "set_final_score";
       matchId: number;
-      payload: { scoreA: number; scoreB: number; finish?: boolean };
+      payload: FinalScorePayload;
     }
   | { action: "undo"; matchId: number }
   | { action: "toggle_clock"; matchId: number }

@@ -6,6 +6,7 @@ import { CalendarDays, LayoutGrid, MapPin, Trophy, X } from "lucide-react";
 import { useSchoolPreference } from "@/src/components/providers/SchoolPreferenceProvider";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
 import { useSimulation } from "@/src/components/providers/SimulationProvider";
+import FinalPhaseBracket from "@/src/components/FinalPhaseBracket";
 import { getSchoolNameFromTeam, isSchoolInMatch } from "@/src/lib/schools";
 import type { MatchItem } from "@/src/lib/tournament-types";
 
@@ -159,7 +160,7 @@ export default function Home() {
                 active={activeTab === "llaves"}
                 onClick={() => setActiveTab("llaves")}
                 icon={LayoutGrid}
-                label="Llaves"
+                label="Fase final"
               />
             </nav>
           </div>
@@ -331,7 +332,7 @@ export default function Home() {
 
         {activeTab === "llaves" && (
           <BracketSection
-            title={`Llaves · ${category} ${competition}`}
+            title={`${category} ${competition}`}
             bracket={bracket}
             onOpenMatch={setSelectedMatch}
           />
@@ -702,148 +703,12 @@ function BracketSection({
   bracket: { cuartos: MatchItem[]; semis: MatchItem[]; final: MatchItem[] };
   onOpenMatch: (match: MatchItem) => void;
 }) {
-  const hasMatches =
-    bracket.cuartos.length + bracket.semis.length + bracket.final.length > 0;
-
   return (
-    <section className="relative overflow-hidden rounded-[30px] bg-[#151711] p-5 text-white md:p-8">
-      <FieldLines />
-      <div className="relative z-10 mb-7">
-        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#d7c77a]">
-          Fase final
-        </p>
-        <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">{title}</h2>
-
-        <p className="mt-2 text-sm font-medium text-white/45">
-          Solo se muestran los cruces de la selección actual.
-        </p>
-      </div>
-
-      {!hasMatches ? (
-        <p className="relative z-10 rounded-2xl border border-white/10 bg-white/[0.06] p-5 text-sm font-bold text-white/55">
-          Las llaves aparecerán cuando se carguen partidos de fase final para
-          esta categoría.
-        </p>
-      ) : (
-        <div className="relative z-10 grid gap-5 md:grid-cols-3">
-          <BracketColumn
-            title="Cuartos"
-            matches={bracket.cuartos}
-            onOpenMatch={onOpenMatch}
-          />
-          <BracketColumn
-            title="Semifinales"
-            matches={bracket.semis}
-            onOpenMatch={onOpenMatch}
-          />
-          <BracketColumn
-            title="Finales"
-            matches={bracket.final}
-            onOpenMatch={onOpenMatch}
-            final
-          />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function BracketColumn({
-  title,
-  matches,
-  final = false,
-  onOpenMatch,
-}: {
-  title: string;
-  matches: MatchItem[];
-  final?: boolean;
-  onOpenMatch: (match: MatchItem) => void;
-}) {
-  return (
-    <div>
-      <h3
-        className={`mb-4 text-center text-[11px] font-black uppercase tracking-[0.2em] ${final ? "text-[#d7c77a]" : "text-white/45"}`}
-      >
-        {title}
-      </h3>
-      <div className="space-y-4">
-        {matches.length === 0 ? (
-          <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center text-xs font-bold text-white/35">
-            Sin cruces
-          </p>
-        ) : (
-          matches.map((match) => (
-            <BracketMatch
-              key={match.id}
-              match={match}
-              final={final}
-              onOpen={() => onOpenMatch(match)}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BracketMatch({
-  match,
-  final = false,
-  onOpen,
-}: {
-  match: MatchItem;
-  final?: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className={`w-full overflow-hidden rounded-2xl border text-left transition hover:scale-[1.01] ${final ? "border-[#d7c77a]/40 bg-[#d7c77a]/10" : "border-white/10 bg-white/[0.06]"}`}
-    >
-      <BracketTeam
-        name={match.teamA}
-        score={match.scoreA}
-        active={isWinner(match, "teamA")}
-      />
-      <BracketTeam
-        name={match.teamB}
-        score={match.scoreB}
-        active={isWinner(match, "teamB")}
-      />
-      {match.penalties && (
-        <p className="border-t border-white/10 px-4 py-2 text-right text-[10px] font-black uppercase tracking-[0.16em] text-white/45">
-          Penales: {match.penalties}
-        </p>
-      )}
-    </button>
-  );
-}
-
-function BracketTeam({
-  name,
-  score,
-  active,
-}: {
-  name: string;
-  score: number | null;
-  active: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-2">
-        <TeamShield name={name} size="sm" />
-        <span
-          className={`truncate pr-3 text-sm ${active ? "font-black text-white" : "font-bold text-white/50"}`}
-        >
-          {displayTeam(name)}
-        </span>
-      </div>
-      <span
-        className={`text-lg font-black ${active ? "text-[#d7c77a]" : "text-white/35"}`}
-      >
-        {score ?? "-"}
-      </span>
-    </div>
+    <FinalPhaseBracket
+      title={title}
+      matches={[...bracket.cuartos, ...bracket.semis, ...bracket.final]}
+      onOpenMatch={onOpenMatch}
+    />
   );
 }
 

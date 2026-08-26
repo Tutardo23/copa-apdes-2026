@@ -1,21 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { ArrowLeft, KeyRound, RotateCcw, ShieldCheck, Target, Wand2 } from "lucide-react";
-import { useSimulation } from "@/src/components/providers/SimulationProvider";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  KeyRound,
+  RotateCcw,
+  ShieldCheck,
+  Target,
+  Trophy,
+  Wand2,
+} from "lucide-react";
+import {
+  useSimulation,
+  type SimulatedResult,
+} from "@/src/components/providers/SimulationProvider";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
+import {
+  buildGroupStandings,
+  parsePenaltyScore,
+} from "@/src/lib/tournament-engine";
 import type { MatchItem } from "@/src/lib/tournament-types";
 
 type CompetitionFilter = "Federado" | "Colegial";
-type CategoryFilter = "Categoría 1" | "Categoría 2" | "Categoría 3";
-
-type SimulatedResultWithGoals = {
-  scoreA: number;
-  scoreB: number;
-  goalsA?: string[];
-  goalsB?: string[];
-};
+type CategoryFilter =
+  | "Categoría 1"
+  | "Categoría 2"
+  | "Categoría 3";
 
 type ScorerRow = {
   name: string;
@@ -23,11 +39,24 @@ type ScorerRow = {
   goals: number;
 };
 
-const competitions: CompetitionFilter[] = ["Federado", "Colegial"];
-const categories: CategoryFilter[] = ["Categoría 1", "Categoría 2", "Categoría 3"];
+const competitions: CompetitionFilter[] = [
+  "Federado",
+  "Colegial",
+];
+const categories: CategoryFilter[] = [
+  "Categoría 1",
+  "Categoría 2",
+  "Categoría 3",
+];
 
 export default function SimulationAdminPage() {
-  const { matches: realMatches, adminReady, adminError, authenticateAdmin } = useTournament();
+  const {
+    matches: realMatches,
+    adminReady,
+    adminError,
+    authenticateAdmin,
+  } = useTournament();
+
   const {
     simulatedResults,
     setSimulatedResult,
@@ -38,29 +67,66 @@ export default function SimulationAdminPage() {
   } = useSimulation();
 
   const [password, setPassword] = useState("");
-  const [competition, setCompetition] = useState<CompetitionFilter>("Federado");
-  const [category, setCategory] = useState<CategoryFilter>("Categoría 1");
+  const [competition, setCompetition] =
+    useState<CompetitionFilter>("Federado");
+  const [category, setCategory] =
+    useState<CategoryFilter>("Categoría 1");
 
-  const matches = useMemo(() => getEffectiveMatches(realMatches), [realMatches, getEffectiveMatches]);
+  const matches = useMemo(
+    () => getEffectiveMatches(realMatches),
+    [getEffectiveMatches, realMatches],
+  );
 
   const scopedMatches = useMemo(
     () =>
       matches
-        .filter((match) => matchBelongsTo(match, competition, category))
+        .filter((match) =>
+          matchBelongsTo(match, competition, category),
+        )
         .sort(sortMatches),
-    [matches, competition, category],
+    [category, competition, matches],
   );
 
-  const groupMatches = scopedMatches.filter((match) => match.stage === "grupo");
-  const bracketMatches = scopedMatches.filter((match) => match.stage !== "grupo");
-  const table = buildStandings(groupMatches);
+  const groupMatches = scopedMatches.filter(
+    (match) => match.stage === "grupo",
+  );
+
+  const bracketMatches = scopedMatches.filter(
+    (match) => match.stage !== "grupo",
+  );
+
+  const table = buildGroupStandings(groupMatches);
   const scorers = buildScorers(scopedMatches);
-  const bestDefense = table.filter((row) => row.j > 0).sort((a, b) => a.gc - b.gc || b.pts - a.pts)[0];
-  const totalSimulatedGoals = scopedMatches.reduce((sum, match) => {
-    if (match.status !== "finalizado" || match.scoreA === null || match.scoreB === null) return sum;
+
+  const bestDefense = [...table]
+    .filter((row) => row.j > 0)
+    .sort(
+      (a, b) =>
+        a.gc - b.gc ||
+        b.pts - a.pts ||
+        a.team.localeCompare(b.team),
+    )[0];
+
+  const totalGoals = scopedMatches.reduce((sum, match) => {
+    if (
+      match.status !== "finalizado" ||
+      match.scoreA === null ||
+      match.scoreB === null
+    ) {
+      return sum;
+    }
+
     return sum + match.scoreA + match.scoreB;
   }, 0);
-  const allGroupPlayed = groupMatches.length > 0 && groupMatches.every((match) => match.status === "finalizado");
+
+  const allGroupPlayed =
+    groupMatches.length > 0 &&
+    groupMatches.every(
+      (match) =>
+        match.status === "finalizado" &&
+        match.scoreA !== null &&
+        match.scoreB !== null,
+    );
 
   return (
     <main className="min-h-screen bg-[#f6f4ee] text-[#151711]">
@@ -71,7 +137,8 @@ export default function SimulationAdminPage() {
               href="/admin"
               className="mb-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[#62675d]"
             >
-              <ArrowLeft className="h-4 w-4" /> Volver al admin
+              <ArrowLeft className="h-4 w-4" />
+              Volver al admin
             </Link>
 
             <p className="mb-2 text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
@@ -79,15 +146,19 @@ export default function SimulationAdminPage() {
             </p>
 
             <h1 className="max-w-4xl text-[2.55rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
-              Simulación de{" "}
+              Simulación del{" "}
               <span className="relative inline-block">
-                <span className="relative z-10">llaves</span>
+                <span className="relative z-10">
+                  torneo
+                </span>
                 <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-sky-200 md:h-4" />
               </span>
             </h1>
 
             <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#62675d]">
-              Cargá resultados y goleadoras ficticias para probar cómo evolucionan la tabla, las estadísticas y las llaves. No toca Neon ni modifica los resultados reales.
+              Usa el mismo motor de clasificación, semifinales, final y penales
+              que la página real. La única diferencia es que estos resultados
+              quedan guardados en este dispositivo y no tocan Neon.
             </p>
           </div>
 
@@ -110,18 +181,21 @@ export default function SimulationAdminPage() {
               <span className="rounded-full bg-[#151711] p-2 text-[#d7c77a]">
                 <KeyRound className="h-5 w-5" />
               </span>
-
               <div>
-                <p className="text-sm font-black">Acceso privado de administrador</p>
+                <p className="text-sm font-black">
+                  Acceso privado de administrador
+                </p>
                 <p className="text-xs font-bold text-[#74786a]">
-                  La simulación también queda dentro del admin.
+                  La simulación queda dentro del admin.
                 </p>
               </div>
             </div>
 
             <input
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) =>
+                setPassword(event.target.value)
+              }
               type="password"
               placeholder="Clave admin"
               className="rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-4 py-3 text-sm font-bold outline-none focus:border-[#151711]"
@@ -146,7 +220,13 @@ export default function SimulationAdminPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <FilterBlock title="Competencia">
                     {competitions.map((item) => (
-                      <PillButton key={item} active={competition === item} onClick={() => setCompetition(item)}>
+                      <PillButton
+                        key={item}
+                        active={competition === item}
+                        onClick={() =>
+                          setCompetition(item)
+                        }
+                      >
                         {item}
                       </PillButton>
                     ))}
@@ -154,7 +234,11 @@ export default function SimulationAdminPage() {
 
                   <FilterBlock title="Categoría">
                     {categories.map((item) => (
-                      <PillButton key={item} active={category === item} onClick={() => setCategory(item)}>
+                      <PillButton
+                        key={item}
+                        active={category === item}
+                        onClick={() => setCategory(item)}
+                      >
                         {item}
                       </PillButton>
                     ))}
@@ -162,10 +246,12 @@ export default function SimulationAdminPage() {
                 </div>
 
                 <button
+                  type="button"
                   onClick={clearSimulation}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-[#62675d] transition hover:-translate-y-0.5"
                 >
-                  <RotateCcw className="h-4 w-4" /> Limpiar simulación
+                  <RotateCcw className="h-4 w-4" />
+                  Limpiar simulación
                 </button>
               </div>
             </section>
@@ -175,7 +261,7 @@ export default function SimulationAdminPage() {
                 <SectionTitle
                   label="Carga ficticia"
                   title={`Fase de grupos · ${category} ${competition}`}
-                  help="Cargá resultado y goleadoras. La tabla y las estadísticas se recalculan automáticamente."
+                  help="Cargá resultados y, si querés, goleadoras. Cuando termina todo el grupo se completan automáticamente los cruces."
                 />
 
                 {groupMatches.length === 0 ? (
@@ -185,7 +271,9 @@ export default function SimulationAdminPage() {
                     <SimulationRow
                       key={match.id}
                       match={match}
-                      simulated={simulatedResults[match.id] as SimulatedResultWithGoals | undefined}
+                      simulated={
+                        simulatedResults[match.id]
+                      }
                       onSave={setSimulatedResult}
                       onRemove={removeSimulatedResult}
                     />
@@ -198,7 +286,9 @@ export default function SimulationAdminPage() {
                   <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
                     Tabla simulada
                   </p>
-                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">Clasificación</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                    Clasificación
+                  </h2>
 
                   <div className="mt-4 space-y-2">
                     {table.length === 0 ? (
@@ -208,36 +298,66 @@ export default function SimulationAdminPage() {
                         <div
                           key={row.team}
                           className={`grid grid-cols-[32px_1fr_auto] items-center gap-3 rounded-2xl p-3 ${
-                            index < 4 ? "bg-sky-50" : "bg-[#fbfaf6]"
+                            index < 4
+                              ? "bg-sky-50"
+                              : "bg-[#fbfaf6]"
                           }`}
                         >
-                          <span className="text-sm font-black text-[#74786a]">{index + 1}</span>
+                          <span className="text-sm font-black text-[#74786a]">
+                            {index + 1}
+                          </span>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-[#151711]">{row.team}</p>
+                            <p className="truncate text-sm font-black text-[#151711]">
+                              {row.team}
+                            </p>
                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
-                              {row.gf}:{row.gc} · Dif {row.dif}
+                              {row.gf}:{row.gc} · Dif{" "}
+                              {formatDiff(row.difValue)}
                             </p>
                           </div>
-                          <span className="text-lg font-black">{row.pts}</span>
+                          <span className="text-lg font-black">
+                            {row.pts}
+                          </span>
                         </div>
                       ))
                     )}
                   </div>
 
-                  <p className="mt-4 rounded-2xl bg-[#f6f4ee] p-3 text-xs font-bold leading-5 text-[#62675d]">
-                    Cuando estén cargados todos los partidos de grupo, los puestos 1º a 4º pasan a semifinales: 1º vs 4º y 2º vs 3º. El 5º y 6º juegan por el 5º puesto.
-                  </p>
+                  <div className="mt-4 rounded-2xl bg-[#f6f4ee] p-3">
+                    <div className="flex items-center gap-2">
+                      {allGroupPlayed ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                      ) : (
+                        <Wand2 className="h-4 w-4 text-[#74786a]" />
+                      )}
+                      <p className="text-xs font-black text-[#62675d]">
+                        {allGroupPlayed
+                          ? "Grupo completo: cruces definidos."
+                          : "Completá todos los partidos de grupo para definir los cruces."}
+                      </p>
+                    </div>
+                  </div>
                 </section>
 
-                <section className="rounded-[30px] border border-[#ded9cc] bg-[#151711] p-4 text-white shadow-sm">
+                <section className="rounded-[30px] bg-[#151711] p-4 text-white shadow-sm">
                   <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/45">
                     Estadísticas simuladas
                   </p>
-                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">Vista previa</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                    Vista previa
+                  </h2>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <MiniStat icon={Target} label="Goles" value={totalSimulatedGoals} />
-                    <MiniStat icon={ShieldCheck} label="Valla" value={bestDefense?.team ?? "—"} />
+                    <MiniStat
+                      icon={Target}
+                      label="Goles"
+                      value={totalGoals}
+                    />
+                    <MiniStat
+                      icon={ShieldCheck}
+                      label="Valla"
+                      value={bestDefense?.team ?? "—"}
+                    />
                   </div>
 
                   <div className="mt-4 rounded-2xl bg-white/10 p-3">
@@ -247,21 +367,31 @@ export default function SimulationAdminPage() {
 
                     {scorers.length === 0 ? (
                       <p className="text-xs font-bold text-white/55">
-                        Cargá nombres de goleadoras para ver el ranking.
+                        Cargá nombres para ver el ranking.
                       </p>
                     ) : (
                       <div className="space-y-2">
-                        {scorers.slice(0, 6).map((scorer, index) => (
-                          <div key={`${scorer.name}-${scorer.team}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/10 px-3 py-2">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-black">#{index + 1} · {scorer.name}</p>
-                              <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-white/45">{scorer.team}</p>
+                        {scorers
+                          .slice(0, 6)
+                          .map((scorer, index) => (
+                            <div
+                              key={`${scorer.name}-${scorer.team}`}
+                              className="flex items-center justify-between gap-3 rounded-xl bg-white/10 px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black">
+                                  #{index + 1} ·{" "}
+                                  {scorer.name}
+                                </p>
+                                <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-white/45">
+                                  {scorer.team}
+                                </p>
+                              </div>
+                              <span className="rounded-full bg-[#d7c77a] px-2 py-1 text-xs font-black text-[#151711]">
+                                {scorer.goals}
+                              </span>
                             </div>
-                            <span className="rounded-full bg-[#d7c77a] px-2 py-1 text-xs font-black text-[#151711]">
-                              {scorer.goals}
-                            </span>
-                          </div>
-                        ))}
+                          ))}
                       </div>
                     )}
                   </div>
@@ -271,9 +401,13 @@ export default function SimulationAdminPage() {
 
             <section className="space-y-4">
               <SectionTitle
-                label="Llaves"
-                title={allGroupPlayed ? "Cruces proyectados" : "Cargá todos los grupos para completar cruces"}
-                help="Los nombres aparecen automáticamente según la tabla simulada. También podés simular semifinales y finales."
+                label="Fase final"
+                title={
+                  allGroupPlayed
+                    ? "Cruces definidos"
+                    : "Esperando cierre de grupos"
+                }
+                help="Probá 5°/6°, semifinales, 3°/4° y final. Si hay empate, aparece la definición por penales igual que en la carga real."
               />
 
               <div className="grid gap-4 lg:grid-cols-3">
@@ -281,7 +415,9 @@ export default function SimulationAdminPage() {
                   <SimulationRow
                     key={match.id}
                     match={match}
-                    simulated={simulatedResults[match.id] as SimulatedResultWithGoals | undefined}
+                    simulated={
+                      simulatedResults[match.id]
+                    }
                     onSave={setSimulatedResult}
                     onRemove={removeSimulatedResult}
                     compact
@@ -296,38 +432,6 @@ export default function SimulationAdminPage() {
   );
 }
 
-function FilterBlock({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-[#74786a]">{title}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
-
-function PillButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full border px-4 py-2 text-sm font-black transition ${
-        active ? "border-[#151711] bg-[#151711] text-white shadow-sm" : "border-[#ded9cc] bg-white text-[#62675d] hover:border-[#151711]/30"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SectionTitle({ label, title, help }: { label: string; title: string; help: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">{label}</p>
-      <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">{title}</h2>
-      <p className="mt-1 text-sm font-bold text-[#62675d]">{help}</p>
-    </div>
-  );
-}
-
 function SimulationRow({
   match,
   simulated,
@@ -336,289 +440,486 @@ function SimulationRow({
   compact = false,
 }: {
   match: MatchItem;
-  simulated?: SimulatedResultWithGoals;
-  onSave: (matchId: number, scoreA: number, scoreB: number, goalsA?: string[], goalsB?: string[]) => void;
+  simulated?: SimulatedResult;
+  onSave: (
+    matchId: number,
+    scoreA: number,
+    scoreB: number,
+    goalsA?: string[],
+    goalsB?: string[],
+    penalties?: string | null,
+  ) => void;
   onRemove: (matchId: number) => void;
   compact?: boolean;
 }) {
-  const initialScoreA = simulated?.scoreA ?? match.scoreA ?? "";
-  const initialScoreB = simulated?.scoreB ?? match.scoreB ?? "";
-  const [scoreA, setScoreA] = useState(String(initialScoreA));
-  const [scoreB, setScoreB] = useState(String(initialScoreB));
-  const [goalsA, setGoalsA] = useState<string[]>(() => normalizeGoalInputs(simulated?.goalsA, Number(initialScoreA) || 0));
-  const [goalsB, setGoalsB] = useState<string[]>(() => normalizeGoalInputs(simulated?.goalsB, Number(initialScoreB) || 0));
-  const active = Boolean(simulated);
+  const [scoreA, setScoreA] = useState(
+    String(simulated?.scoreA ?? match.scoreA ?? ""),
+  );
+  const [scoreB, setScoreB] = useState(
+    String(simulated?.scoreB ?? match.scoreB ?? ""),
+  );
+  const [goalsA, setGoalsA] = useState(
+    (simulated?.goalsA ?? [])
+      .map((goal) => goal.player)
+      .join(", "),
+  );
+  const [goalsB, setGoalsB] = useState(
+    (simulated?.goalsB ?? [])
+      .map((goal) => goal.player)
+      .join(", "),
+  );
 
-  const cleanScoreA = scoreToNumber(scoreA);
-  const cleanScoreB = scoreToNumber(scoreB);
+  const initialPenalties =
+    parsePenaltyScore(
+      simulated?.penalties ?? match.penalties,
+    );
+
+  const [penaltyA, setPenaltyA] = useState(
+    initialPenalties
+      ? String(initialPenalties.scoreA)
+      : "",
+  );
+  const [penaltyB, setPenaltyB] = useState(
+    initialPenalties
+      ? String(initialPenalties.scoreB)
+      : "",
+  );
 
   useEffect(() => {
-    setGoalsA((prev) => normalizeGoalInputs(prev, cleanScoreA));
-  }, [cleanScoreA]);
+    setScoreA(
+      String(simulated?.scoreA ?? match.scoreA ?? ""),
+    );
+    setScoreB(
+      String(simulated?.scoreB ?? match.scoreB ?? ""),
+    );
+    setGoalsA(
+      (simulated?.goalsA ?? [])
+        .map((goal) => goal.player)
+        .join(", "),
+    );
+    setGoalsB(
+      (simulated?.goalsB ?? [])
+        .map((goal) => goal.player)
+        .join(", "),
+    );
 
-  useEffect(() => {
-    setGoalsB((prev) => normalizeGoalInputs(prev, cleanScoreB));
-  }, [cleanScoreB]);
+    const penalties = parsePenaltyScore(
+      simulated?.penalties ?? match.penalties,
+    );
+    setPenaltyA(
+      penalties ? String(penalties.scoreA) : "",
+    );
+    setPenaltyB(
+      penalties ? String(penalties.scoreB) : "",
+    );
+  }, [
+    match.id,
+    match.scoreA,
+    match.scoreB,
+    match.penalties,
+    simulated,
+  ]);
+
+  const numericA = Number(scoreA);
+  const numericB = Number(scoreB);
+  const validScores =
+    Number.isInteger(numericA) &&
+    Number.isInteger(numericB) &&
+    numericA >= 0 &&
+    numericB >= 0;
+
+  const needsPenalties =
+    match.stage !== "grupo" &&
+    validScores &&
+    numericA === numericB;
+
+  const save = () => {
+    if (!validScores) {
+      window.alert("Cargá un marcador válido.");
+      return;
+    }
+
+    let penalties: string | null = null;
+
+    if (needsPenalties) {
+      const pA = Number(penaltyA);
+      const pB = Number(penaltyB);
+
+      if (
+        !Number.isInteger(pA) ||
+        !Number.isInteger(pB) ||
+        pA < 0 ||
+        pB < 0 ||
+        pA === pB
+      ) {
+        window.alert(
+          "La definición por penales necesita un ganador.",
+        );
+        return;
+      }
+
+      penalties = `${pA}-${pB}`;
+    }
+
+    onSave(
+      match.id,
+      numericA,
+      numericB,
+      parseNames(goalsA),
+      parseNames(goalsB),
+      penalties,
+    );
+  };
 
   return (
-    <article className={`rounded-[26px] border p-4 shadow-sm ${active ? "border-sky-200 bg-sky-50" : "border-[#ded9cc] bg-white/80"}`}>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-[26px] border border-[#ded9cc] bg-white/85 p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#74786a]">
-            {dayLabel(match.day)} · {formatTime(match.timeLabel)} · {match.court}
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#74786a]">
+            {stageLabel(match)} · {displayTime(match.timeLabel)}
           </p>
-          <h3 className={`${compact ? "text-lg" : "text-xl"} mt-1 font-black tracking-[-0.04em]`}>
-            {match.teamA} <span className="text-[#74786a]">vs</span> {match.teamB}
-          </h3>
-          <p className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">
-            {match.stage === "grupo" ? "Fase de grupos" : labelStage(match.stage)}
+          <p className="mt-1 text-[10px] font-bold text-[#9a9486]">
+            {match.court}
           </p>
         </div>
-        {active && <span className="rounded-full bg-sky-900 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">Simulado</span>}
+
+        {simulated && (
+          <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-sky-800">
+            Simulado
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-        <ScoreInput label={match.teamA} value={scoreA} onChange={setScoreA} />
-        <span className="pb-3 text-2xl font-black text-[#74786a]">:</span>
-        <ScoreInput label={match.teamB} value={scoreB} onChange={setScoreB} />
+      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+        <MiniScoreInput
+          label={match.teamA}
+          value={scoreA}
+          onChange={setScoreA}
+        />
+        <span className="pb-3 text-xl font-black text-[#d7c77a]">
+          :
+        </span>
+        <MiniScoreInput
+          label={match.teamB}
+          value={scoreB}
+          onChange={setScoreB}
+        />
       </div>
 
-      {(cleanScoreA > 0 || cleanScoreB > 0) && (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <GoalInputs
-            team={match.teamA}
-            goals={goalsA}
-            setGoals={setGoalsA}
+      {!compact && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <NameInput
+            label={`Goleadoras · ${shortTeam(match.teamA)}`}
+            value={goalsA}
+            onChange={setGoalsA}
           />
-          <GoalInputs
-            team={match.teamB}
-            goals={goalsB}
-            setGoals={setGoalsB}
+          <NameInput
+            label={`Goleadoras · ${shortTeam(match.teamB)}`}
+            value={goalsB}
+            onChange={setGoalsB}
           />
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {needsPenalties && (
+        <div className="mt-3 rounded-2xl border border-[#d7c77a]/50 bg-[#fff8dc] p-3">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-[0.15em] text-[#6f6125]">
+            Penales
+          </p>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+            <MiniScoreInput
+              label={shortTeam(match.teamA)}
+              value={penaltyA}
+              onChange={setPenaltyA}
+            />
+            <span className="pb-3 text-lg font-black text-[#9c8737]">
+              :
+            </span>
+            <MiniScoreInput
+              label={shortTeam(match.teamB)}
+              value={penaltyB}
+              onChange={setPenaltyB}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <button
-          onClick={() => onSave(match.id, cleanScoreA, cleanScoreB, sanitizeGoals(goalsA, cleanScoreA, match.teamA), sanitizeGoals(goalsB, cleanScoreB, match.teamB))}
-          className="inline-flex items-center gap-2 rounded-2xl bg-[#151711] px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-white"
+          type="button"
+          onClick={save}
+          className="rounded-2xl bg-[#151711] px-3 py-3 text-[9px] font-black uppercase tracking-[0.13em] text-white"
         >
-          <Wand2 className="h-4 w-4" /> Guardar ficticio
+          Guardar prueba
         </button>
         <button
-          onClick={() => {
-            onRemove(match.id);
-            setScoreA("");
-            setScoreB("");
-            setGoalsA([]);
-            setGoalsB([]);
-          }}
-          className="rounded-2xl border border-[#ded9cc] bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#62675d]"
+          type="button"
+          disabled={!simulated}
+          onClick={() => onRemove(match.id)}
+          className="rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-3 text-[9px] font-black uppercase tracking-[0.13em] text-[#74786a] disabled:opacity-35"
         >
-          Quitar
+          Quitar prueba
         </button>
       </div>
     </article>
   );
 }
 
-function ScoreInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="min-w-0">
-      <span className="mb-1 block truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#74786a]">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value.replace(/[^0-9]/g, ""))}
-        inputMode="numeric"
-        className="w-full rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] px-4 py-3 text-center text-3xl font-black outline-none focus:border-[#151711]"
-        placeholder="0"
-      />
-    </label>
-  );
-}
-
-function GoalInputs({
-  team,
-  goals,
-  setGoals,
+function FilterBlock({
+  title,
+  children,
 }: {
-  team: string;
-  goals: string[];
-  setGoals: Dispatch<SetStateAction<string[]>>;
+  title: string;
+  children: React.ReactNode;
 }) {
-  if (goals.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-[#ded9cc] bg-white/70 p-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">{team}</p>
-        <p className="mt-1 text-xs font-bold text-[#74786a]">Sin goles.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-2xl border border-[#ded9cc] bg-white/70 p-3">
-      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">Goleadoras · {team}</p>
-      <div className="space-y-2">
-        {goals.map((goal, index) => (
-          <input
-            key={index}
-            value={goal}
-            onChange={(event) => {
-              const next = [...goals];
-              next[index] = event.target.value;
-              setGoals(next);
-            }}
-            placeholder={`Nombre gol ${index + 1}`}
-            className="w-full rounded-xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-2 text-sm font-bold outline-none focus:border-[#151711]"
-          />
-        ))}
+    <div>
+      <p className="mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-[#74786a]">
+        {title}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {children}
       </div>
     </div>
   );
 }
 
-type TableRow = {
-  team: string;
-  pts: number;
-  j: number;
-  gf: number;
-  gc: number;
-  dif: string;
-  difValue: number;
-};
-
-function buildStandings(matches: MatchItem[]): TableRow[] {
-  const map = new Map<string, { team: string; pts: number; j: number; gf: number; gc: number; difValue: number }>();
-  const ensure = (team: string) => {
-    if (!map.has(team)) map.set(team, { team, pts: 0, j: 0, gf: 0, gc: 0, difValue: 0 });
-    return map.get(team)!;
-  };
-
-  for (const match of matches) {
-    ensure(match.teamA);
-    ensure(match.teamB);
-    if (match.status !== "finalizado" || match.scoreA === null || match.scoreB === null) continue;
-    const a = ensure(match.teamA);
-    const b = ensure(match.teamB);
-    a.j += 1;
-    b.j += 1;
-    a.gf += match.scoreA;
-    a.gc += match.scoreB;
-    b.gf += match.scoreB;
-    b.gc += match.scoreA;
-    if (match.scoreA > match.scoreB) a.pts += 3;
-    else if (match.scoreB > match.scoreA) b.pts += 3;
-    else {
-      a.pts += 1;
-      b.pts += 1;
-    }
-  }
-
-  return Array.from(map.values())
-    .map((row) => ({ ...row, difValue: row.gf - row.gc, dif: formatDiff(row.gf - row.gc) }))
-    .sort((a, b) => b.pts - a.pts || b.difValue - a.difValue || b.gf - a.gf || a.team.localeCompare(b.team));
+function PillButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-4 py-2 text-sm font-black transition ${
+        active
+          ? "border-[#151711] bg-[#151711] text-white shadow-sm"
+          : "border-[#ded9cc] bg-white text-[#62675d] hover:border-[#151711]/30"
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
-function buildScorers(matches: MatchItem[]): ScorerRow[] {
-  const map = new Map<string, ScorerRow>();
-
-  for (const match of matches) {
-    for (const event of match.events ?? []) {
-      if (event.type !== "goal") continue;
-      const team = event.team === "teamA" ? match.teamA : match.teamB;
-      const key = `${event.player}-${team}`;
-      const prev = map.get(key);
-      map.set(key, {
-        name: event.player,
-        team,
-        goals: prev ? prev.goals + 1 : 1,
-      });
-    }
-  }
-
-  return [...map.values()].sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
+function SectionTitle({
+  label,
+  title,
+  help,
+}: {
+  label: string;
+  title: string;
+  help: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
+        {label}
+      </p>
+      <h2 className="mt-1 text-3xl font-black tracking-[-0.06em]">
+        {title}
+      </h2>
+      <p className="mt-1 text-sm font-bold text-[#62675d]">
+        {help}
+      </p>
+    </div>
+  );
 }
 
-function MiniStat({ icon: Icon, label, value }: { icon: typeof Target; label: string; value: string | number }) {
+function MiniScoreInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="min-w-0">
+      <span className="mb-1 block truncate text-[8px] font-black uppercase tracking-[0.1em] text-[#74786a]">
+        {label}
+      </span>
+      <input
+        type="number"
+        min={0}
+        max={99}
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="w-full rounded-xl border border-[#ded9cc] bg-[#fbfaf6] px-2 py-2.5 text-center text-xl font-black outline-none focus:border-[#151711]"
+      />
+    </label>
+  );
+}
+
+function NameInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-1 block truncate text-[8px] font-black uppercase tracking-[0.1em] text-[#74786a]">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        placeholder="Nombre, Nombre..."
+        className="w-full rounded-xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-2.5 text-xs font-bold outline-none focus:border-[#151711]"
+      />
+    </label>
+  );
+}
+
+function MiniStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Target;
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="rounded-2xl bg-white/10 p-3">
-      <Icon className="mb-2 h-5 w-5 text-[#d7c77a]" />
-      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/40">{label}</p>
-      <p className="mt-1 truncate text-lg font-black">{value}</p>
+      <Icon className="h-4 w-4 text-[#d7c77a]" />
+      <p className="mt-3 text-[8px] font-black uppercase tracking-[0.14em] text-white/40">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-black">
+        {value}
+      </p>
     </div>
   );
 }
 
 function EmptyMessage({ text }: { text: string }) {
   return (
-    <p className="rounded-2xl border border-dashed border-[#ded9cc] bg-[#fbfaf6] p-4 text-sm font-bold text-[#74786a]">
+    <p className="rounded-2xl border border-dashed border-[#ded9cc] bg-[#fbfaf6] p-5 text-center text-sm font-bold text-[#74786a]">
       {text}
     </p>
   );
 }
 
-function matchBelongsTo(match: MatchItem, competition: CompetitionFilter, category: CategoryFilter) {
-  return getCompetitionFromCategory(match.category) === competition && getCleanCategory(match.category) === category;
+function buildScorers(matches: MatchItem[]) {
+  const map = new Map<string, ScorerRow>();
+
+  for (const match of matches) {
+    for (const event of match.events) {
+      if (event.type !== "goal" || !event.player.trim()) {
+        continue;
+      }
+
+      const team =
+        event.team === "teamA"
+          ? match.teamA
+          : match.teamB;
+
+      const key = `${event.player.trim()}|${team}`;
+      const previous = map.get(key);
+
+      map.set(key, {
+        name: event.player.trim(),
+        team,
+        goals: (previous?.goals ?? 0) + 1,
+      });
+    }
+  }
+
+  return [...map.values()].sort(
+    (a, b) =>
+      b.goals - a.goals ||
+      a.name.localeCompare(b.name),
+  );
 }
 
-function getCompetitionFromCategory(category: string): CompetitionFilter {
-  return category.toLowerCase().includes("colegial") ? "Colegial" : "Federado";
+function matchBelongsTo(
+  match: MatchItem,
+  competition: CompetitionFilter,
+  category: CategoryFilter,
+) {
+  const normalized = normalize(match.category);
+
+  return (
+    normalized.includes(normalize(competition)) &&
+    normalized.includes(normalize(category))
+  );
 }
 
-function getCleanCategory(category: string): CategoryFilter {
-  const normalized = category.toLowerCase();
-  if (normalized.includes("3")) return "Categoría 3";
-  if (normalized.includes("2")) return "Categoría 2";
-  return "Categoría 1";
+function normalize(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function sortMatches(a: MatchItem, b: MatchItem) {
-  return dayOrder(a.day) - dayOrder(b.day) || timeToMinutes(a.timeLabel) - timeToMinutes(b.timeLabel) || a.court.localeCompare(b.court);
+function parseNames(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function dayOrder(day: string) {
-  return day === "dia2" ? 2 : 1;
+function shortTeam(value: string) {
+  return value.replace(/\s*\([^)]+\)\s*$/g, "").trim();
 }
 
-function dayLabel(day: string) {
-  return day === "dia2" ? "Día 2" : "Día 1";
+function stageLabel(match: MatchItem) {
+  if (match.stage === "grupo") return "Grupo";
+  if (match.stage === "semifinal") return "Semifinal";
+
+  const time = displayTime(match.timeLabel);
+  if (time.startsWith("11:45")) return "5° / 6°";
+  if (time.startsWith("14:15")) return "3° / 4°";
+  if (time.startsWith("14:45")) return "1° / 2°";
+  return "Definición";
 }
 
-function formatTime(value: string) {
-  return value.replace(/^(\d{1,2}),(\d{2})/, "$1:$2");
+function displayTime(value: string) {
+  return value
+    .trim()
+    .replace(/^(\d{1,2}),(\d{2})/, "$1:$2")
+    .replace(/\s*hs?\.?$/i, " hs");
 }
 
-function timeToMinutes(value: string) {
-  const match = formatTime(value).match(/(\d{1,2}):(\d{2})/);
+function timeValue(value: string) {
+  const match = displayTime(value).match(/(\d{1,2}):(\d{2})/);
   if (!match) return 9999;
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function labelStage(stage: MatchItem["stage"]) {
-  if (stage === "semifinal") return "Semifinal";
-  if (stage === "final") return "Final / puesto";
-  if (stage === "cuartos") return "Cuartos";
-  return "Grupo";
+function courtNumber(court: string) {
+  const match = court.match(/\d+/);
+  return match ? Number(match[0]) : 99;
+}
+
+function sortMatches(a: MatchItem, b: MatchItem) {
+  return (
+    (a.day === "dia1" ? 1 : 2) -
+      (b.day === "dia1" ? 1 : 2) ||
+    timeValue(a.timeLabel) - timeValue(b.timeLabel) ||
+    courtNumber(a.court) - courtNumber(b.court) ||
+    a.id - b.id
+  );
 }
 
 function formatDiff(value: number) {
-  if (value > 0) return `+${value}`;
-  return String(value);
-}
-
-function scoreToNumber(value: string) {
-  const parsed = Number.parseInt(value || "0", 10);
-  if (Number.isNaN(parsed)) return 0;
-  return Math.max(0, parsed);
-}
-
-function normalizeGoalInputs(current: string[] | undefined, total: number) {
-  return Array.from({ length: Math.max(0, total) }, (_, index) => current?.[index] ?? "");
-}
-
-function sanitizeGoals(goals: string[], total: number, team: string) {
-  return Array.from({ length: total }, (_, index) => {
-    const value = goals[index]?.trim();
-    return value || `${team} · Gol ${index + 1}`;
-  });
+  return value > 0 ? `+${value}` : String(value);
 }

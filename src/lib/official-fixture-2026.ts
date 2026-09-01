@@ -787,7 +787,7 @@ const GROUP_MATCHES: OfficialMatch[] = [
   {
     day: "dia2",
     date: "Día 2",
-    timeLabel: "09:30 hs",
+    timeLabel: "09:55 hs",
     category: "Categoría 1 Federado",
     court: "Cancha 1 (Sintético)",
     teamA: "TORREÓN (1F)",
@@ -798,7 +798,7 @@ const GROUP_MATCHES: OfficialMatch[] = [
   {
     day: "dia2",
     date: "Día 2",
-    timeLabel: "10:20 hs",
+    timeLabel: "09:30 hs",
     category: "Categoría 1 Federado",
     court: "Cancha 1 (Sintético)",
     teamA: "Los Candiles (1F)",
@@ -886,7 +886,7 @@ const GROUP_MATCHES: OfficialMatch[] = [
   {
     day: "dia2",
     date: "Día 2",
-    timeLabel: "10:45 hs",
+    timeLabel: "10:20 hs",
     category: "Categoría 3 Federado",
     court: "Cancha 3 (Sintético)",
     teamA: "BUEN AYRE (3F)",
@@ -897,7 +897,7 @@ const GROUP_MATCHES: OfficialMatch[] = [
   {
     day: "dia2",
     date: "Día 2",
-    timeLabel: "11:10 hs",
+    timeLabel: "10:45 hs",
     category: "Categoría 3 Federado",
     court: "Cancha 3 (Sintético)",
     teamA: "Los Candiles (3F)",

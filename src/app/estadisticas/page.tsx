@@ -507,16 +507,16 @@ function getSchoolName(team: string) {
   const normalized = normalizeText(team);
 
   if (normalized.includes("candiles") || normalized === "lcd" || normalized.startsWith("lcd ")) {
-    return "Los Candiles";
+    return "LOS CANDILES";
   }
-  if (normalized.includes("mirasoles")) return "Mirasoles";
-  if (normalized.includes("torreon")) return "Torreón";
-  if (normalized.includes("crisol")) return "Crisol";
-  if (normalized.includes("buen ayre")) return "Buen Ayre";
-  if (normalized.includes("cerros")) return "Los Cerros";
-  if (normalized.includes("portezuelo")) return "Portezuelo";
+  if (normalized.includes("mirasoles")) return "MIRASOLES";
+  if (normalized.includes("torreon")) return "EL TORREON";
+  if (normalized.includes("crisol")) return "CRISOL";
+  if (normalized.includes("buen ayre")) return "EL BUEN AYRE";
+  if (normalized.includes("cerros")) return "LOS CERROS";
+  if (normalized.includes("portezuelo")) return "PORTEZUELO";
 
-  return team.replace(/\s*\([123][CF]\)\s*$/i, "").trim();
+  return team.replace(/\s*\([123][CF]\)\s*$/i, "").trim().toUpperCase();
 }
 
 function normalizeText(value: string) {

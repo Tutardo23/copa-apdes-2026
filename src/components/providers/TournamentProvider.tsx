@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { getTeamDisplayName } from "@/src/lib/schools";
 import { applyTournamentProgression } from "@/src/lib/tournament-engine";
 import type {
   BulkCreateMatchItem,
@@ -84,7 +85,14 @@ export function TournamentProvider({
   const [adminError, setAdminError] = useState<string | null>(null);
 
   const matches = useMemo(
-    () => applyTournamentProgression(rawMatches),
+    () =>
+      applyTournamentProgression(
+        rawMatches.map((match) => ({
+          ...match,
+          teamA: getTeamDisplayName(match.teamA),
+          teamB: getTeamDisplayName(match.teamB),
+        })),
+      ),
     [rawMatches],
   );
 

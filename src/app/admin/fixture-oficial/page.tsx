@@ -15,6 +15,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useTournament } from "@/src/components/providers/TournamentProvider";
+import { getTeamDisplayName } from "@/src/lib/schools";
 import {
   OFFICIAL_FIXTURE_2026,
   OFFICIAL_FIXTURE_SUMMARY,
@@ -223,11 +224,15 @@ export default function OfficialFixturePage() {
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
                   {match.timeLabel} · {match.court}
                 </p>
-                <p className="mt-2 text-sm font-black">{match.teamA}</p>
+                <p className="mt-2 text-sm font-black">
+                  {getTeamDisplayName(match.teamA)}
+                </p>
                 <p className="my-1 text-[10px] font-black uppercase tracking-[0.15em] text-[#a29b89]">
                   vs
                 </p>
-                <p className="text-sm font-black">{match.teamB}</p>
+                <p className="text-sm font-black">
+                  {getTeamDisplayName(match.teamB)}
+                </p>
               </article>
             ))}
           </div>

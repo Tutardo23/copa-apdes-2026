@@ -32,42 +32,42 @@ type SchoolStats = {
 };
 
 const schoolEscudos: Record<string, string> = {
-  Mirasoles: "/escudos/mirasoles.png",
-  Torreón: "/escudos/torreon.png",
-  Crisol: "/escudos/crisol.png",
-  "Buen Ayre": "/escudos/buen-ayre.png",
-  "Los Cerros": "/escudos/los-cerros.png",
-  Portezuelo: "/escudos/portezuelo.png",
-  "Los Candiles": "/escudos/los-candiles.png",
+  MIRASOLES: "/escudos/mirasoles.png",
+  "EL TORREON": "/escudos/torreon.png",
+  CRISOL: "/escudos/crisol.png",
+  "EL BUEN AYRE": "/escudos/buen-ayre.png",
+  "LOS CERROS": "/escudos/los-cerros.png",
+  PORTEZUELO: "/escudos/portezuelo.png",
+  "LOS CANDILES": "/escudos/los-candiles.png",
 };
 
 const schoolThemes: Record<
   string,
   { accent: string; soft: string; text: string }
 > = {
-  Mirasoles: {
+  MIRASOLES: {
     accent: "bg-emerald-700",
     soft: "bg-emerald-50",
     text: "text-emerald-800",
   },
-  Torreón: { accent: "bg-sky-700", soft: "bg-sky-50", text: "text-sky-800" },
-  Crisol: { accent: "bg-rose-700", soft: "bg-rose-50", text: "text-rose-800" },
-  "Buen Ayre": {
+  "EL TORREON": { accent: "bg-sky-700", soft: "bg-sky-50", text: "text-sky-800" },
+  CRISOL: { accent: "bg-rose-700", soft: "bg-rose-50", text: "text-rose-800" },
+  "EL BUEN AYRE": {
     accent: "bg-indigo-700",
     soft: "bg-indigo-50",
     text: "text-indigo-800",
   },
-  "Los Cerros": {
+  "LOS CERROS": {
     accent: "bg-violet-700",
     soft: "bg-violet-50",
     text: "text-violet-800",
   },
-  Portezuelo: {
+  PORTEZUELO: {
     accent: "bg-cyan-700",
     soft: "bg-cyan-50",
     text: "text-cyan-800",
   },
-  "Los Candiles": {
+  "LOS CANDILES": {
     accent: "bg-orange-700",
     soft: "bg-orange-50",
     text: "text-orange-800",
@@ -124,7 +124,7 @@ export default function MiColegioPage() {
   const selectedSchool = preferredSchoolAvailable ||
     (viewingAllSchools && colegios.includes(schoolChoice) ? schoolChoice : colegios[0] || "");
   const showControlSchoolSelector = viewingAllSchools && !preferredSchoolAvailable;
-  const theme = schoolThemes[selectedSchool] || schoolThemes.Portezuelo;
+  const theme = schoolThemes[selectedSchool] || schoolThemes.PORTEZUELO;
 
   const schoolMatches = useMemo(
     () =>
@@ -866,13 +866,13 @@ function buildSchoolStats(matches: MatchItem[], school: string): SchoolStats {
 function getSchoolName(team: string) {
   const normalized = normalizeText(team);
   if (normalized === "lcd" || normalized.includes("candiles"))
-    return "Los Candiles";
-  if (normalized.includes("mirasoles")) return "Mirasoles";
-  if (normalized.includes("torreon")) return "Torreón";
-  if (normalized.includes("crisol")) return "Crisol";
-  if (normalized.includes("buen ayre")) return "Buen Ayre";
-  if (normalized.includes("cerros")) return "Los Cerros";
-  if (normalized.includes("portezuelo")) return "Portezuelo";
+    return "LOS CANDILES";
+  if (normalized.includes("mirasoles")) return "MIRASOLES";
+  if (normalized.includes("torreon")) return "EL TORREON";
+  if (normalized.includes("crisol")) return "CRISOL";
+  if (normalized.includes("buen ayre")) return "EL BUEN AYRE";
+  if (normalized.includes("cerros")) return "LOS CERROS";
+  if (normalized.includes("portezuelo")) return "PORTEZUELO";
   return team;
 }
 

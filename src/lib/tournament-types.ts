@@ -1,6 +1,10 @@
 export type DayKey = "dia1" | "dia2";
 export type TeamKey = "teamA" | "teamB";
-export type EventType = "goal" | "green_card" | "yellow_card";
+export type EventType =
+  | "goal"
+  | "green_card"
+  | "yellow_card"
+  | "red_card";
 export type MatchStatus = "por_jugar" | "en_curso" | "finalizado";
 export type MatchStage = "grupo" | "cuartos" | "semifinal" | "final";
 
@@ -69,7 +73,12 @@ export type TournamentAction =
   | {
       action: "event";
       matchId: number;
-      payload: { team: TeamKey; type: EventType; player: string };
+      payload: {
+        team: TeamKey;
+        type: EventType;
+        player: string;
+        count?: number;
+      };
     }
   | {
       action: "set_final_score";

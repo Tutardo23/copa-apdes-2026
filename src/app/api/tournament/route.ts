@@ -18,7 +18,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    return Response.json({ matches: await getMatches() });
+    return Response.json(
+      { matches: await getMatches() },
+      { headers: { "cache-control": "no-store" } },
+    );
   } catch {
     return Response.json(
       {
@@ -32,11 +35,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (
-      !verifyAdminPassword(
-        request.headers.get("x-admin-password"),
-      )
-    ) {
+    if (!verifyAdminPassword(request.headers.get("x-admin-password"))) {
       return Response.json(
         { error: "Clave de administrador incorrecta." },
         { status: 401 },
@@ -68,9 +67,7 @@ export async function POST(request: Request) {
       }
 
       if (action.payload.matches.length > 300) {
-        throw new Error(
-          "Importá como máximo 300 partidos por vez.",
-        );
+        throw new Error("Importá como máximo 300 partidos por vez.");
       }
 
       for (const match of action.payload.matches) {
@@ -89,10 +86,22 @@ export async function POST(request: Request) {
     }
 
     switch (action.action) {
-      case "event":
+      case "event": {
         validateEvent(action.payload);
-        await addEvent(action.matchId, action.payload);
+        const count = Math.max(
+          1,
+          Math.min(20, Math.trunc(Number(action.payload.count ?? 1))),
+        );
+
+        for (let index = 0; index < count; index += 1) {
+          await addEvent(action.matchId, {
+            team: action.payload.team,
+            type: action.payload.type,
+            player: action.payload.player,
+          });
+        }
         break;
+      }
 
       case "undo":
         await undoLastEvent(action.matchId);
@@ -131,10 +140,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return Response.json(
       {
-        error: readableError(
-          error,
-          "No se pudo guardar el cambio.",
-        ),
+        error: readableError(error, "No se pudo guardar el cambio."),
       },
       { status: 400 },
     );
@@ -142,23 +148,31 @@ export async function POST(request: Request) {
 }
 
 function validateEvent(
-  payload: Extract<
-    TournamentAction,
-    { action: "event" }
-  >["payload"],
+  payload: Extract<TournamentAction, { action: "event" }>["payload"],
 ) {
   if (!["teamA", "teamB"].includes(payload.team)) {
     throw new Error("Equipo inválido.");
   }
 
   if (
-    !["goal", "green_card", "yellow_card"].includes(payload.type)
+    !["goal", "green_card", "yellow_card", "red_card"].includes(
+      payload.type,
+    )
   ) {
     throw new Error("Evento inválido.");
   }
 
   if (!payload.player || payload.player.trim().length > 80) {
     throw new Error("Jugadora inválida.");
+  }
+
+  if (
+    payload.count !== undefined &&
+    (!Number.isInteger(Number(payload.count)) ||
+      Number(payload.count) < 1 ||
+      Number(payload.count) > 20)
+  ) {
+    throw new Error("Cantidad de eventos inválida.");
   }
 }
 
@@ -206,9 +220,7 @@ function validateMatch(
   }
 
   if (
-    !["grupo", "cuartos", "semifinal", "final"].includes(
-      payload.stage,
-    )
+    !["grupo", "cuartos", "semifinal", "final"].includes(payload.stage)
   ) {
     throw new Error("Fase inválida.");
   }
@@ -222,9 +234,7 @@ function validateMatch(
     payload.teamB,
   ]) {
     if (!field || field.trim().length > 80) {
-      throw new Error(
-        "Completá todos los datos del partido.",
-      );
+      throw new Error("Completá todos los datos del partido.");
     }
   }
 
@@ -244,6 +254,7 @@ function readableError(error: unknown, fallback: string) {
     "Equipo inválido.",
     "Evento inválido.",
     "Jugadora inválida.",
+    "Cantidad de eventos inválida.",
     "Marcador inválido.",
     "Marcador de penales inválido.",
     "Día inválido.",
@@ -258,7 +269,5 @@ function readableError(error: unknown, fallback: string) {
     "Cargá un resultado antes de finalizar este partido.",
   ];
 
-  return publicMessages.includes(error.message)
-    ? error.message
-    : fallback;
+  return publicMessages.includes(error.message) ? error.message : fallback;
 }

@@ -49,16 +49,18 @@ type TournamentContextType = {
   }) => Promise<boolean>;
   addEvent: (
     matchId: number,
-    payload: { team: TeamKey; type: EventType; player: string },
+    payload: {
+      team: TeamKey;
+      type: EventType;
+      player: string;
+      count?: number;
+    },
   ) => Promise<boolean>;
   undoLastEvent: (matchId: number) => Promise<boolean>;
   toggleClock: (matchId: number) => Promise<boolean>;
   resetClock: (matchId: number) => Promise<boolean>;
   resetMatch: (matchId: number) => Promise<boolean>;
-  setPeriod: (
-    matchId: number,
-    period: 1 | 2 | 3 | 4,
-  ) => Promise<boolean>;
+  setPeriod: (matchId: number, period: 1 | 2 | 3 | 4) => Promise<boolean>;
   setFinalScore: (
     matchId: number,
     payload: FinalScorePayload,
@@ -67,15 +69,13 @@ type TournamentContextType = {
 };
 
 const TournamentContext = createContext<TournamentContextType | null>(null);
+const ADMIN_SESSION_KEY = "copa-apdes-admin-password";
 
 export function TournamentProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Guardamos lo que llega de Neon sin tocar los participantes placeholder.
-  // La progresión se deriva en memoria para que simulación y torneo real
-  // compartan exactamente el mismo motor.
   const [rawMatches, setRawMatches] = useState<MatchItem[]>([]);
   const [activeMatchId, setActiveMatchId] = useState<number>(0);
   const [isLive, setIsLive] = useState(false);
@@ -115,9 +115,7 @@ export function TournamentProvider({
       };
 
       if (!response.ok || !result.matches) {
-        throw new Error(
-          result.error ?? "No se pudieron leer los partidos.",
-        );
+        throw new Error(result.error ?? "No se pudieron leer los partidos.");
       }
 
       useReturnedMatches(result.matches);
@@ -130,17 +128,38 @@ export function TournamentProvider({
   }, [useReturnedMatches]);
 
   useEffect(() => {
-    const initialLoad = setTimeout(() => void refresh(), 0);
-    const poll = setInterval(() => void refresh(), 5000);
+    let lastPublicRefresh = 0;
+
+    const tick = (force = false) => {
+      if (document.hidden) return;
+
+      const isAdmin = window.location.pathname.startsWith("/admin");
+      const now = Date.now();
+
+      if (force || isAdmin || now - lastPublicRefresh >= 10000) {
+        if (!isAdmin) lastPublicRefresh = now;
+        void refresh();
+      }
+    };
+
+    const initialLoad = window.setTimeout(() => tick(true), 0);
+    const poll = window.setInterval(() => tick(false), 5000);
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) tick(true);
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      clearTimeout(initialLoad);
-      clearInterval(poll);
+      window.clearTimeout(initialLoad);
+      window.clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [refresh]);
 
   useEffect(() => {
-    const clock = setInterval(() => {
+    const clock = window.setInterval(() => {
       setRawMatches((previous) =>
         previous.map((match) =>
           match.isRunning
@@ -150,8 +169,69 @@ export function TournamentProvider({
       );
     }, 1000);
 
-    return () => clearInterval(clock);
+    return () => window.clearInterval(clock);
   }, []);
+
+  const authenticateAdmin = useCallback(async (password: string) => {
+    setAdminError(null);
+
+    try {
+      const response = await fetch("/api/tournament", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-admin-password": password,
+        },
+        body: JSON.stringify({ action: "authenticate" }),
+      });
+
+      const result = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setAdminReady(false);
+        setAdminError(result.error ?? "Clave incorrecta.");
+        return false;
+      }
+
+      setAdminPassword(password);
+      setAdminReady(true);
+
+      try {
+        window.sessionStorage.setItem(ADMIN_SESSION_KEY, password);
+      } catch {
+        // La sesión sigue funcionando aunque el navegador bloquee sessionStorage.
+      }
+
+      return true;
+    } catch {
+      setAdminReady(false);
+      setAdminError("No se pudo validar la clave.");
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      let saved = "";
+
+      try {
+        saved = window.sessionStorage.getItem(ADMIN_SESSION_KEY) ?? "";
+      } catch {
+        return;
+      }
+
+      if (!saved || cancelled) return;
+      await authenticateAdmin(saved);
+    };
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticateAdmin]);
 
   const sendAdminAction = useCallback(
     async (action: TournamentAction) => {
@@ -180,9 +260,15 @@ export function TournamentProvider({
         };
 
         if (!response.ok || !result.matches) {
-          setAdminError(
-            result.error ?? "No se pudo guardar el cambio.",
-          );
+          if (response.status === 401) {
+            setAdminReady(false);
+            setAdminPassword("");
+            try {
+              window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
+            } catch {}
+          }
+
+          setAdminError(result.error ?? "No se pudo guardar el cambio.");
           return false;
         }
 
@@ -197,37 +283,6 @@ export function TournamentProvider({
     },
     [adminPassword, adminReady, useReturnedMatches],
   );
-
-  const authenticateAdmin = useCallback(async (password: string) => {
-    setAdminError(null);
-
-    try {
-      const response = await fetch("/api/tournament", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({ action: "authenticate" }),
-      });
-
-      const result = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        setAdminReady(false);
-        setAdminError(result.error ?? "Clave incorrecta.");
-        return false;
-      }
-
-      setAdminPassword(password);
-      setAdminReady(true);
-      return true;
-    } catch {
-      setAdminReady(false);
-      setAdminError("No se pudo validar la clave.");
-      return false;
-    }
-  }, []);
 
   const value = useMemo<TournamentContextType>(
     () => ({
@@ -289,9 +344,7 @@ export function useTournament() {
   const context = useContext(TournamentContext);
 
   if (!context) {
-    throw new Error(
-      "useTournament debe usarse dentro de TournamentProvider",
-    );
+    throw new Error("useTournament debe usarse dentro de TournamentProvider");
   }
 
   return context;

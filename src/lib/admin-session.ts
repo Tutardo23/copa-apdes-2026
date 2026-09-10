@@ -51,17 +51,17 @@ export function hasAdminAccess(request: Request) {
 }
 
 export function adminSessionCookie() {
-  const secure =
-    process.env.NODE_ENV === "production" ? "; Secure" : "";
-
-  return [
+  const parts = [
     `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(expectedToken())}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${MAX_AGE_SECONDS}`,
-    secure.replace(/^; /, ""),
-  ]
-    .filter(Boolean)
-    .join("; ");
+  ];
+
+  if (process.env.NODE_ENV === "production") {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
 }

@@ -8,21 +8,30 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  applyTournamentProgression,
-  parsePenaltyScore,
-} from "@/src/lib/tournament-engine";
+import { applyTournamentProgression } from "@/src/lib/tournament-engine";
 import type {
   MatchEvent,
   MatchItem,
 } from "@/src/lib/tournament-types";
 import type {
   SimulatedCard,
+  SimulatedEvent,
   SimulatedGoal,
   SimulatedResult,
 } from "@/src/lib/simulation-types";
 
-export type { SimulatedCard, SimulatedGoal, SimulatedResult };
+export type {
+  SimulatedCard,
+  SimulatedEvent,
+  SimulatedGoal,
+  SimulatedResult,
+};
+
+type BatchOperation =
+  | "start"
+  | "pause"
+  | "reset"
+  | "finish";
 
 type SimulationContextType = {
   simulationEnabled: boolean;
@@ -31,158 +40,296 @@ type SimulationContextType = {
   syncError: string | null;
   setSimulationEnabled: (enabled: boolean) => void;
   refreshSimulation: () => Promise<boolean>;
-  setSimulatedResult: (
+  clearSimulation: () => Promise<boolean>;
+  removeSimulatedResult: (
+    matchId: number,
+  ) => Promise<boolean>;
+  setSimulationScore: (
     matchId: number,
     scoreA: number,
     scoreB: number,
-    goalsA?: SimulatedGoal[],
-    goalsB?: SimulatedGoal[],
-    cardsA?: SimulatedCard[],
-    cardsB?: SimulatedCard[],
     penalties?: string | null,
+    finish?: boolean,
   ) => Promise<boolean>;
-  removeSimulatedResult: (matchId: number) => Promise<boolean>;
-  clearSimulation: () => Promise<boolean>;
-  getEffectiveMatches: (matches: MatchItem[]) => MatchItem[];
+  addSimulationEvent: (
+    matchId: number,
+    payload: {
+      team: "teamA" | "teamB";
+      type:
+        | "goal"
+        | "green_card"
+        | "yellow_card"
+        | "red_card";
+      player: string;
+      count?: number;
+    },
+  ) => Promise<boolean>;
+  undoSimulationEvent: (
+    matchId: number,
+  ) => Promise<boolean>;
+  toggleSimulationClock: (
+    matchId: number,
+  ) => Promise<boolean>;
+  resetSimulationClock: (
+    matchId: number,
+  ) => Promise<boolean>;
+  setSimulationDuration: (
+    matchId: number,
+    durationSeconds: number,
+  ) => Promise<boolean>;
+  setSimulationPeriod: (
+    matchId: number,
+    period: 1 | 2 | 3 | 4,
+  ) => Promise<boolean>;
+  finishSimulationMatch: (
+    matchId: number,
+  ) => Promise<boolean>;
+  resetSimulationMatch: (
+    matchId: number,
+  ) => Promise<boolean>;
+  runSimulationBatch: (
+    matchIds: number[],
+    operation: BatchOperation,
+  ) => Promise<boolean>;
+  getEffectiveMatches: (
+    matches: MatchItem[],
+  ) => MatchItem[];
 };
 
-const ENABLED_KEY = "copa-apdes-simulation-enabled";
-const ADMIN_SESSION_KEY = "copa-apdes-admin-password";
-const SimulationContext = createContext<SimulationContextType | null>(null);
+const ENABLED_KEY =
+  "copa-apdes-simulation-enabled";
+const SimulationContext =
+  createContext<SimulationContextType | null>(null);
 
 export function SimulationProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [simulationEnabled, setSimulationEnabledState] = useState(false);
-  const [simulatedResults, setSimulatedResults] = useState<
+  const [
+    simulationEnabled,
+    setSimulationEnabledState,
+  ] = useState(false);
+  const [
+    simulatedResults,
+    setSimulatedResults,
+  ] = useState<
     Record<number, SimulatedResult>
   >({});
   const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncError, setSyncError] =
+    useState<string | null>(null);
 
   useEffect(() => {
     try {
       setSimulationEnabledState(
-        window.localStorage.getItem(ENABLED_KEY) === "true",
+        window.localStorage.getItem(
+          ENABLED_KEY,
+        ) === "true",
       );
     } catch {
       setSimulationEnabledState(false);
     }
   }, []);
 
-  const setSimulationEnabled = useCallback((enabled: boolean) => {
-    setSimulationEnabledState(enabled);
+  const setSimulationEnabled = useCallback(
+    (enabled: boolean) => {
+      setSimulationEnabledState(enabled);
 
-    try {
-      window.localStorage.setItem(ENABLED_KEY, String(enabled));
-    } catch {}
-  }, []);
-
-  const getAdminPassword = useCallback(() => {
-    try {
-      return window.sessionStorage.getItem(ADMIN_SESSION_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  }, []);
-
-  const refreshSimulation = useCallback(async () => {
-    const adminPassword = getAdminPassword();
-    if (!adminPassword) return false;
-
-    try {
-      const response = await fetch("/api/simulation", {
-        cache: "no-store",
-        headers: { "x-admin-password": adminPassword },
-      });
-
-      const result = (await response.json()) as {
-        results?: Record<number, SimulatedResult>;
-        error?: string;
-      };
-
-      if (!response.ok || !result.results) {
-        throw new Error(
-          result.error ?? "No se pudo leer la simulación compartida.",
+      try {
+        window.localStorage.setItem(
+          ENABLED_KEY,
+          String(enabled),
         );
-      }
+      } catch {}
+    },
+    [],
+  );
 
-      setSimulatedResults(normalizeResults(result.results));
-      setSyncError(null);
-      return true;
-    } catch (error) {
-      setSyncError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo sincronizar la simulación.",
-      );
-      return false;
-    }
-  }, [getAdminPassword]);
+  const refreshSimulation =
+    useCallback(async () => {
+      try {
+        const response = await fetch(
+          "/api/simulation",
+          {
+            cache: "no-store",
+            credentials: "same-origin",
+          },
+        );
+
+        if (response.status === 401) {
+          return false;
+        }
+
+        const result =
+          (await response.json()) as {
+            results?: Record<
+              number,
+              SimulatedResult
+            >;
+            error?: string;
+          };
+
+        if (
+          !response.ok ||
+          !result.results
+        ) {
+          throw new Error(
+            result.error ??
+              "No se pudo leer la simulación compartida.",
+          );
+        }
+
+        setSimulatedResults(result.results);
+        setSyncError(null);
+        return true;
+      } catch (error) {
+        setSyncError(
+          error instanceof Error
+            ? error.message
+            : "No se pudo sincronizar la simulación.",
+        );
+        return false;
+      }
+    }, []);
 
   useEffect(() => {
-    const isSimulationPage = window.location.pathname.startsWith(
-      "/admin/simulacion",
-    );
+    const isSimulationPage =
+      window.location.pathname.startsWith(
+        "/admin/simulacion",
+      );
 
-    if (!simulationEnabled && !isSimulationPage) return;
+    if (
+      !simulationEnabled &&
+      !isSimulationPage
+    ) {
+      return;
+    }
 
     const tick = () => {
-      if (!document.hidden) void refreshSimulation();
+      if (!document.hidden) {
+        void refreshSimulation();
+      }
     };
 
-    const initialLoad = window.setTimeout(tick, 0);
-    const poll = window.setInterval(tick, 2500);
+    const initialLoad =
+      window.setTimeout(tick, 0);
+    const poll = window.setInterval(
+      tick,
+      2500,
+    );
 
     const onVisibilityChange = () => {
-      if (!document.hidden) void refreshSimulation();
+      if (!document.hidden) {
+        void refreshSimulation();
+      }
     };
 
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener(
+      "visibilitychange",
+      onVisibilityChange,
+    );
 
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(poll);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibilityChange,
+      );
     };
-  }, [refreshSimulation, simulationEnabled]);
+  }, [
+    refreshSimulation,
+    simulationEnabled,
+  ]);
+
+  useEffect(() => {
+    const clock = window.setInterval(() => {
+      setSimulatedResults((previous) => {
+        let changed = false;
+        const next: Record<
+          number,
+          SimulatedResult
+        > = {};
+
+        for (const [
+          id,
+          result,
+        ] of Object.entries(previous)) {
+          if (
+            result.isRunning &&
+            result.elapsedSeconds <
+              result.durationSeconds
+          ) {
+            changed = true;
+            const elapsedSeconds = Math.min(
+              result.durationSeconds,
+              result.elapsedSeconds + 1,
+            );
+
+            next[Number(id)] = {
+              ...result,
+              elapsedSeconds,
+              isRunning:
+                elapsedSeconds <
+                result.durationSeconds,
+            };
+          } else {
+            next[Number(id)] = result;
+          }
+        }
+
+        return changed ? next : previous;
+      });
+    }, 1000);
+
+    return () =>
+      window.clearInterval(clock);
+  }, []);
 
   const postAction = useCallback(
-    async (payload: unknown) => {
-      const adminPassword = getAdminPassword();
-
-      if (!adminPassword) {
-        setSyncError("Ingresá nuevamente con la clave de administrador.");
-        return false;
-      }
-
+    async (
+      payload: Record<string, unknown>,
+    ) => {
       setSyncing(true);
       setSyncError(null);
 
       try {
-        const response = await fetch("/api/simulation", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-admin-password": adminPassword,
+        const response = await fetch(
+          "/api/simulation",
+          {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "content-type":
+                "application/json",
+            },
+            body: JSON.stringify(payload),
           },
-          body: JSON.stringify(payload),
-        });
+        );
 
-        const result = (await response.json()) as {
-          results?: Record<number, SimulatedResult>;
-          error?: string;
-        };
+        const result =
+          (await response.json()) as {
+            results?: Record<
+              number,
+              SimulatedResult
+            >;
+            error?: string;
+          };
 
-        if (!response.ok || !result.results) {
+        if (
+          !response.ok ||
+          !result.results
+        ) {
           throw new Error(
-            result.error ?? "No se pudo guardar la simulación.",
+            result.error ??
+              "No se pudo guardar la simulación.",
           );
         }
 
-        setSimulatedResults(normalizeResults(result.results));
+        setSimulatedResults(
+          result.results,
+        );
         setSimulationEnabled(true);
         return true;
       } catch (error) {
@@ -196,112 +343,264 @@ export function SimulationProvider({
         setSyncing(false);
       }
     },
-    [getAdminPassword, setSimulationEnabled],
-  );
-
-  const setSimulatedResult = useCallback(
-    async (
-      matchId: number,
-      scoreA: number,
-      scoreB: number,
-      goalsA: SimulatedGoal[] = [],
-      goalsB: SimulatedGoal[] = [],
-      cardsA: SimulatedCard[] = [],
-      cardsB: SimulatedCard[] = [],
-      penalties: string | null = null,
-    ) => {
-      const cleanA = clampScore(scoreA);
-      const cleanB = clampScore(scoreB);
-
-      return postAction({
-        action: "save",
-        matchId,
-        result: {
-          scoreA: cleanA,
-          scoreB: cleanB,
-          goalsA: normalizeGoals(goalsA, cleanA),
-          goalsB: normalizeGoals(goalsB, cleanB),
-          cardsA: normalizeCards(cardsA),
-          cardsB: normalizeCards(cardsB),
-          penalties:
-            cleanA === cleanB ? normalizePenalties(penalties) : null,
-        },
-      });
-    },
-    [postAction],
-  );
-
-  const removeSimulatedResult = useCallback(
-    async (matchId: number) =>
-      postAction({ action: "remove", matchId }),
-    [postAction],
+    [setSimulationEnabled],
   );
 
   const clearSimulation = useCallback(
-    async () => postAction({ action: "clear" }),
+    () =>
+      postAction({
+        action: "clear",
+      }),
     [postAction],
   );
 
-  const getEffectiveMatches = useCallback(
-    (matches: MatchItem[]) => {
-      if (!simulationEnabled) return matches;
+  const removeSimulatedResult =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "remove",
+          matchId,
+        }),
+      [postAction],
+    );
 
-      const simulatedMatches = matches.map((match) => {
-        const simulated = simulatedResults[match.id];
-        if (!simulated) return match;
+  const setSimulationScore =
+    useCallback(
+      (
+        matchId: number,
+        scoreA: number,
+        scoreB: number,
+        penalties: string | null = null,
+        finish = false,
+      ) =>
+        postAction({
+          action: "set_score",
+          matchId,
+          scoreA,
+          scoreB,
+          penalties,
+          finish,
+        }),
+      [postAction],
+    );
 
-        return {
-          ...match,
-          scoreA: simulated.scoreA,
-          scoreB: simulated.scoreB,
-          penalties: simulated.penalties ?? null,
-          status: "finalizado" as const,
-          isRunning: false,
-          events: buildSimulatedEvents(match, simulated),
-        };
-      });
+  const addSimulationEvent =
+    useCallback(
+      (
+        matchId: number,
+        payload: {
+          team: "teamA" | "teamB";
+          type:
+            | "goal"
+            | "green_card"
+            | "yellow_card"
+            | "red_card";
+          player: string;
+          count?: number;
+        },
+      ) =>
+        postAction({
+          action: "event",
+          matchId,
+          ...payload,
+        }),
+      [postAction],
+    );
 
-      return applyTournamentProgression(simulatedMatches);
-    },
-    [simulationEnabled, simulatedResults],
-  );
+  const undoSimulationEvent =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "undo",
+          matchId,
+        }),
+      [postAction],
+    );
 
-  const value = useMemo<SimulationContextType>(
-    () => ({
-      simulationEnabled,
-      simulatedResults,
-      syncing,
-      syncError,
-      setSimulationEnabled,
-      refreshSimulation,
-      setSimulatedResult,
-      removeSimulatedResult,
-      clearSimulation,
-      getEffectiveMatches,
-    }),
-    [
-      clearSimulation,
-      getEffectiveMatches,
-      refreshSimulation,
-      removeSimulatedResult,
-      setSimulatedResult,
-      setSimulationEnabled,
-      simulatedResults,
-      simulationEnabled,
-      syncError,
-      syncing,
-    ],
-  );
+  const toggleSimulationClock =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "toggle_clock",
+          matchId,
+        }),
+      [postAction],
+    );
+
+  const resetSimulationClock =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "reset_clock",
+          matchId,
+        }),
+      [postAction],
+    );
+
+  const setSimulationDuration =
+    useCallback(
+      (
+        matchId: number,
+        durationSeconds: number,
+      ) =>
+        postAction({
+          action: "set_duration",
+          matchId,
+          durationSeconds,
+        }),
+      [postAction],
+    );
+
+  const setSimulationPeriod =
+    useCallback(
+      (
+        matchId: number,
+        period: 1 | 2 | 3 | 4,
+      ) =>
+        postAction({
+          action: "set_period",
+          matchId,
+          period,
+        }),
+      [postAction],
+    );
+
+  const finishSimulationMatch =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "finish",
+          matchId,
+        }),
+      [postAction],
+    );
+
+  const resetSimulationMatch =
+    useCallback(
+      (matchId: number) =>
+        postAction({
+          action: "reset_match",
+          matchId,
+        }),
+      [postAction],
+    );
+
+  const runSimulationBatch =
+    useCallback(
+      (
+        matchIds: number[],
+        operation: BatchOperation,
+      ) =>
+        postAction({
+          action: "batch_clock",
+          matchIds,
+          operation,
+        }),
+      [postAction],
+    );
+
+  const getEffectiveMatches =
+    useCallback(
+      (matches: MatchItem[]) => {
+        if (!simulationEnabled) {
+          return matches;
+        }
+
+        const simulated = matches.map(
+          (match) => {
+            const result =
+              simulatedResults[match.id];
+
+            if (!result) return match;
+
+            return {
+              ...match,
+              scoreA: result.scoreA,
+              scoreB: result.scoreB,
+              penalties:
+                result.penalties,
+              status: result.status,
+              isRunning:
+                result.isRunning,
+              clockSeconds:
+                result.elapsedSeconds,
+              period: result.period,
+              events: buildMatchEvents(
+                match.id,
+                result.events,
+              ),
+            };
+          },
+        );
+
+        return applyTournamentProgression(
+          simulated,
+        );
+      },
+      [
+        simulationEnabled,
+        simulatedResults,
+      ],
+    );
+
+  const value =
+    useMemo<SimulationContextType>(
+      () => ({
+        simulationEnabled,
+        simulatedResults,
+        syncing,
+        syncError,
+        setSimulationEnabled,
+        refreshSimulation,
+        clearSimulation,
+        removeSimulatedResult,
+        setSimulationScore,
+        addSimulationEvent,
+        undoSimulationEvent,
+        toggleSimulationClock,
+        resetSimulationClock,
+        setSimulationDuration,
+        setSimulationPeriod,
+        finishSimulationMatch,
+        resetSimulationMatch,
+        runSimulationBatch,
+        getEffectiveMatches,
+      }),
+      [
+        addSimulationEvent,
+        clearSimulation,
+        finishSimulationMatch,
+        getEffectiveMatches,
+        refreshSimulation,
+        removeSimulatedResult,
+        resetSimulationClock,
+        resetSimulationMatch,
+        runSimulationBatch,
+        setSimulationDuration,
+        setSimulationEnabled,
+        setSimulationPeriod,
+        setSimulationScore,
+        simulatedResults,
+        simulationEnabled,
+        syncError,
+        syncing,
+        toggleSimulationClock,
+        undoSimulationEvent,
+      ],
+    );
 
   return (
-    <SimulationContext.Provider value={value}>
+    <SimulationContext.Provider
+      value={value}
+    >
       {children}
     </SimulationContext.Provider>
   );
 }
 
 export function useSimulation() {
-  const context = useContext(SimulationContext);
+  const context =
+    useContext(SimulationContext);
 
   if (!context) {
     throw new Error(
@@ -312,141 +611,38 @@ export function useSimulation() {
   return context;
 }
 
-function buildSimulatedEvents(
-  match: MatchItem,
-  simulated: SimulatedResult,
+function buildMatchEvents(
+  matchId: number,
+  events: SimulatedEvent[],
 ): MatchEvent[] {
-  const events: MatchEvent[] = [];
-  let id = -(match.id * 10000 + 1);
-  let order = 0;
+  const output: MatchEvent[] = [];
+  let serial = 1;
 
-  const addGoals = (
-    team: "teamA" | "teamB",
-    goals: SimulatedGoal[],
-  ) => {
-    for (const goal of goals) {
-      for (let index = 0; index < goal.count; index += 1) {
-        events.push({
-          id: id--,
-          minute: Math.min(59, 5 + Math.floor(order / 2)),
-          second: (order * 7) % 60,
-          period: 1,
-          team,
-          type: "goal",
-          player: goal.player,
-        });
-        order += 1;
-      }
+  for (const event of events ?? []) {
+    for (
+      let index = 0;
+      index < event.count;
+      index += 1
+    ) {
+      output.push({
+        id: -(
+          matchId * 100000 +
+          serial
+        ),
+        minute: Math.floor(
+          event.elapsedSeconds / 60,
+        ),
+        second:
+          event.elapsedSeconds % 60,
+        period: event.period,
+        team: event.team,
+        type: event.type,
+        player: event.player,
+      });
+
+      serial += 1;
     }
-  };
-
-  const addCards = (
-    team: "teamA" | "teamB",
-    cards: SimulatedCard[],
-  ) => {
-    for (const card of cards) {
-      for (let index = 0; index < card.count; index += 1) {
-        events.push({
-          id: id--,
-          minute: Math.min(59, 10 + Math.floor(order / 2)),
-          second: (order * 11) % 60,
-          period: 1,
-          team,
-          type: card.type,
-          player: card.player,
-        });
-        order += 1;
-      }
-    }
-  };
-
-  addGoals("teamA", simulated.goalsA);
-  addGoals("teamB", simulated.goalsB);
-  addCards("teamA", simulated.cardsA);
-  addCards("teamB", simulated.cardsB);
-
-  return events.sort(
-    (a, b) =>
-      a.minute - b.minute || a.second - b.second || a.id - b.id,
-  );
-}
-
-function clampScore(value: number) {
-  return Number.isFinite(value)
-    ? Math.max(0, Math.min(99, Math.trunc(value)))
-    : 0;
-}
-
-function normalizeGoals(
-  goals: SimulatedGoal[],
-  max: number,
-): SimulatedGoal[] {
-  const next: SimulatedGoal[] = [];
-  let assigned = 0;
-
-  for (const goal of goals ?? []) {
-    const player = String(goal.player ?? "").trim();
-    const count = Math.max(1, Math.trunc(Number(goal.count) || 1));
-
-    if (!player || assigned >= max) continue;
-
-    const allowed = Math.min(count, max - assigned);
-    next.push({ player, count: allowed });
-    assigned += allowed;
   }
 
-  return next;
-}
-
-function normalizeCards(cards: SimulatedCard[]): SimulatedCard[] {
-  return (cards ?? [])
-    .map((card) => ({
-      player: String(card.player ?? "").trim(),
-      type: card.type,
-      count: Math.max(
-        1,
-        Math.min(10, Math.trunc(Number(card.count) || 1)),
-      ),
-    }))
-    .filter(
-      (card) =>
-        card.player &&
-        ["green_card", "yellow_card", "red_card"].includes(card.type),
-    );
-}
-
-function normalizeResults(
-  value: Record<number, SimulatedResult>,
-): Record<number, SimulatedResult> {
-  const next: Record<number, SimulatedResult> = {};
-
-  for (const [rawId, result] of Object.entries(value ?? {})) {
-    const matchId = Number(rawId);
-    if (!Number.isInteger(matchId)) continue;
-
-    const scoreA = clampScore(Number(result.scoreA));
-    const scoreB = clampScore(Number(result.scoreB));
-
-    next[matchId] = {
-      scoreA,
-      scoreB,
-      goalsA: normalizeGoals(result.goalsA ?? [], scoreA),
-      goalsB: normalizeGoals(result.goalsB ?? [], scoreB),
-      cardsA: normalizeCards(result.cardsA ?? []),
-      cardsB: normalizeCards(result.cardsB ?? []),
-      penalties:
-        scoreA === scoreB
-          ? normalizePenalties(result.penalties)
-          : null,
-      updatedAt: result.updatedAt,
-    };
-  }
-
-  return next;
-}
-
-function normalizePenalties(value?: string | null) {
-  const parsed = parsePenaltyScore(value);
-  if (!parsed || parsed.scoreA === parsed.scoreB) return null;
-  return `${parsed.scoreA}-${parsed.scoreB}`;
+  return output;
 }

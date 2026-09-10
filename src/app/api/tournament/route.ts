@@ -10,8 +10,13 @@ import {
   setPeriod,
   toggleClock,
   undoLastEvent,
-  verifyAdminPassword,
 } from "@/src/lib/tournament-data";
+import {
+  adminSessionCookie,
+  hasAdminAccess,
+  hasValidAdminSession,
+  verifyAdminPasswordInput,
+} from "@/src/lib/admin-session";
 import type { TournamentAction } from "@/src/lib/tournament-types";
 
 export const dynamic = "force-dynamic";
@@ -35,17 +40,36 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (!verifyAdminPassword(request.headers.get("x-admin-password"))) {
+    const action = (await request.json()) as TournamentAction;
+
+    if (action.action === "authenticate") {
+      const suppliedPassword = request.headers.get("x-admin-password");
+
+      if (
+        suppliedPassword &&
+        verifyAdminPasswordInput(suppliedPassword)
+      ) {
+        return Response.json(
+          { ok: true },
+          { headers: { "set-cookie": adminSessionCookie() } },
+        );
+      }
+
+      if (hasValidAdminSession(request)) {
+        return Response.json({ ok: true });
+      }
+
       return Response.json(
         { error: "Clave de administrador incorrecta." },
         { status: 401 },
       );
     }
 
-    const action = (await request.json()) as TournamentAction;
-
-    if (action.action === "authenticate") {
-      return Response.json({ ok: true });
+    if (!hasAdminAccess(request)) {
+      return Response.json(
+        { error: "La sesión de administrador venció. Volvé a ingresar." },
+        { status: 401 },
+      );
     }
 
     if (action.action === "create_match") {
@@ -140,7 +164,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return Response.json(
       {
-        error: readableError(error, "No se pudo guardar el cambio."),
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudo guardar el cambio.",
       },
       { status: 400 },
     );
@@ -184,12 +211,7 @@ function validateFinalScore(
 ) {
   if (
     !Number.isInteger(payload.scoreA) ||
-    !Number.isInteger(payload.scoreB)
-  ) {
-    throw new Error("Marcador inválido.");
-  }
-
-  if (
+    !Number.isInteger(payload.scoreB) ||
     payload.scoreA < 0 ||
     payload.scoreB < 0 ||
     payload.scoreA > 99 ||
@@ -219,13 +241,7 @@ function validateMatch(
     throw new Error("Día inválido.");
   }
 
-  if (
-    !["grupo", "cuartos", "semifinal", "final"].includes(payload.stage)
-  ) {
-    throw new Error("Fase inválida.");
-  }
-
-  for (const field of [
+  for (const value of [
     payload.date,
     payload.timeLabel,
     payload.category,
@@ -233,41 +249,8 @@ function validateMatch(
     payload.teamA,
     payload.teamB,
   ]) {
-    if (!field || field.trim().length > 80) {
+    if (!value?.trim()) {
       throw new Error("Completá todos los datos del partido.");
     }
   }
-
-  if (payload.teamA.trim() === payload.teamB.trim()) {
-    throw new Error("Los equipos deben ser distintos.");
-  }
-}
-
-function readableError(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-
-  const publicMessages = [
-    "Falta configurar ADMIN_PASSWORD.",
-    "El partido no existe.",
-    "El partido ya está finalizado.",
-    "Período inválido.",
-    "Equipo inválido.",
-    "Evento inválido.",
-    "Jugadora inválida.",
-    "Cantidad de eventos inválida.",
-    "Marcador inválido.",
-    "Marcador de penales inválido.",
-    "Día inválido.",
-    "Fase inválida.",
-    "Completá todos los datos del partido.",
-    "Los equipos deben ser distintos.",
-    "Modo de carga inválido.",
-    "No hay partidos para importar.",
-    "Importá como máximo 300 partidos por vez.",
-    "En fase final, un empate necesita definición por penales.",
-    "Los penales no pueden terminar empatados.",
-    "Cargá un resultado antes de finalizar este partido.",
-  ];
-
-  return publicMessages.includes(error.message) ? error.message : fallback;
 }

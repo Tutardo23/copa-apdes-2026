@@ -20,7 +20,10 @@ import { useSimulation } from "@/src/components/providers/SimulationProvider";
 type Tab = "resumen" | "goleadoras" | "fairplay";
 type DayFilter = "todos" | DayKey;
 type CompetitionFilter = "Federado" | "Colegial";
-type CategoryFilter = "Categoría 1" | "Categoría 2" | "Categoría 3";
+type CategoryFilter =
+  | "Categoría 1"
+  | "Categoría 2"
+  | "Categoría 3";
 
 type TeamStats = {
   team: string;
@@ -41,10 +44,15 @@ type CardStat = {
   team: string;
   green: number;
   yellow: number;
+  red: number;
 };
 
 const COMPETITIONS: CompetitionFilter[] = ["Federado", "Colegial"];
-const CATEGORIES: CategoryFilter[] = ["Categoría 1", "Categoría 2", "Categoría 3"];
+const CATEGORIES: CategoryFilter[] = [
+  "Categoría 1",
+  "Categoría 2",
+  "Categoría 3",
+];
 
 export default function EstadisticasPage() {
   const { matches } = useTournament();
@@ -66,12 +74,23 @@ export default function EstadisticasPage() {
     () =>
       effectiveMatches.filter((match) => {
         if (match.stage !== "grupo") return false;
-        if (getCompetition(match.category) !== competitionFilter) return false;
-        if (getBaseCategory(match.category) !== categoryFilter) return false;
-        if (dayFilter !== "todos" && match.day !== dayFilter) return false;
+        if (getCompetition(match.category) !== competitionFilter) {
+          return false;
+        }
+        if (getBaseCategory(match.category) !== categoryFilter) {
+          return false;
+        }
+        if (dayFilter !== "todos" && match.day !== dayFilter) {
+          return false;
+        }
         return true;
       }),
-    [categoryFilter, competitionFilter, dayFilter, effectiveMatches],
+    [
+      categoryFilter,
+      competitionFilter,
+      dayFilter,
+      effectiveMatches,
+    ],
   );
 
   const { teamStats, scorers, cards, totalGoals } = useMemo(
@@ -82,13 +101,27 @@ export default function EstadisticasPage() {
   const leader = scorers[0];
   const bestDefense = [...teamStats]
     .filter((team) => team.played > 0)
-    .sort((a, b) => a.against - b.against || b.pts - a.pts)[0];
-  const maxGoals = Math.max(1, ...scorers.map((player) => player.goals));
-  const maxTeamGoals = Math.max(1, ...teamStats.map((team) => team.goals));
+    .sort(
+      (a, b) =>
+        a.against - b.against || b.pts - a.pts,
+    )[0];
+
+  const maxGoals = Math.max(
+    1,
+    ...scorers.map((player) => player.goals),
+  );
+  const maxTeamGoals = Math.max(
+    1,
+    ...teamStats.map((team) => team.goals),
+  );
 
   const contextLabel = `${categoryFilter} · ${competitionFilter}`;
   const dayLabel =
-    dayFilter === "dia1" ? "Día 1" : dayFilter === "dia2" ? "Día 2" : "Todos los días";
+    dayFilter === "dia1"
+      ? "Día 1"
+      : dayFilter === "dia2"
+        ? "Día 2"
+        : "Todos los días";
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f6f4ee] text-[#151711]">
@@ -109,16 +142,12 @@ export default function EstadisticasPage() {
               </div>
 
               <h1 className="max-w-3xl text-[2.6rem] font-black leading-[0.92] tracking-[-0.075em] md:text-7xl">
-                Estadísticas{" "}
-                <span className="relative inline-block">
-                  <span className="relative z-10">APDES</span>
-                  <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#d7c77a]/75 md:h-4" />
-                </span>
+                Estadísticas APDES
               </h1>
 
               <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[#62675d]">
-                Métricas separadas por competencia y categoría. Los filtros
-                afectan resumen, goleadoras y fair play.
+                Métricas separadas por competencia y categoría. Goles,
+                goleadoras y las tres tarjetas se actualizan con la carga.
               </p>
             </div>
 
@@ -148,7 +177,9 @@ export default function EstadisticasPage() {
                   <FilterButton
                     key={competition}
                     active={competitionFilter === competition}
-                    onClick={() => setCompetitionFilter(competition)}
+                    onClick={() =>
+                      setCompetitionFilter(competition)
+                    }
                   >
                     {competition}
                   </FilterButton>
@@ -160,7 +191,9 @@ export default function EstadisticasPage() {
                   <FilterButton
                     key={category}
                     active={categoryFilter === category}
-                    onClick={() => setCategoryFilter(category)}
+                    onClick={() =>
+                      setCategoryFilter(category)
+                    }
                   >
                     {category}
                   </FilterButton>
@@ -172,7 +205,7 @@ export default function EstadisticasPage() {
                   Día
                 </p>
                 <div className="flex items-center gap-1 rounded-full border border-[#ded9cc] bg-[#f6f4ee] p-1">
-                  <CalendarDays className="ml-2 h-4 w-4 shrink-0 text-[#74786a]" />
+                  <CalendarDays className="ml-2 h-4 w-4 text-[#74786a]" />
                   <DayButton
                     active={dayFilter === "todos"}
                     label="Todos"
@@ -196,10 +229,10 @@ export default function EstadisticasPage() {
               <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#74786a]">
                 Mostrando
               </span>
-              <span className="rounded-full bg-[#151711] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+              <span className="rounded-full bg-[#151711] px-3 py-1.5 text-[10px] font-black uppercase text-white">
                 {contextLabel}
               </span>
-              <span className="rounded-full border border-[#ded9cc] bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#62675d]">
+              <span className="rounded-full border border-[#ded9cc] bg-white px-3 py-1.5 text-[10px] font-black uppercase text-[#62675d]">
                 {dayLabel}
               </span>
               <span className="ml-auto text-xs font-black text-[#74786a]">
@@ -210,11 +243,10 @@ export default function EstadisticasPage() {
         </header>
 
         {simulationEnabled && (
-          <section className="mb-6 rounded-[24px] border border-[#ded9cc] bg-[#151711] p-4 text-white shadow-sm">
+          <section className="mb-6 rounded-[24px] bg-[#151711] p-4 text-white">
             <p className="text-sm font-bold leading-6 text-white/75">
-              Estás viendo estadísticas simuladas. Sirven para probar cómo
-              quedarían las goleadoras, goles por equipo, defensas y fair play
-              sin modificar los resultados reales.
+              Estás viendo estadísticas simuladas. No modifican los
+              resultados reales.
             </p>
           </section>
         )}
@@ -242,70 +274,40 @@ export default function EstadisticasPage() {
               />
               <MetricCard
                 label="Equipos activos"
-                value={teamStats.filter((team) => team.played > 0).length}
+                value={
+                  teamStats.filter((team) => team.played > 0)
+                    .length
+                }
                 icon={Trophy}
                 detail="Con partidos jugados"
               />
             </div>
 
-            <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
-              <div className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
-                <div className="mb-5">
+            <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
                   <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
-                    Rendimiento · {contextLabel}
+                    Rendimiento
                   </p>
-                  <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
+                  <h2 className="mt-1 text-2xl font-black">
                     Goles por colegio
                   </h2>
                 </div>
-
-                <div className="space-y-4">
-                  {teamStats.length === 0 ? (
-                    <Empty text="No hay partidos para esta selección." />
-                  ) : (
-                    teamStats.map((team) => (
-                      <TeamBar key={team.team} team={team} max={maxTeamGoals} />
-                    ))
-                  )}
-                </div>
+                <BarChart3 className="h-5 w-5 text-[#74786a]" />
               </div>
 
-              <div className="rounded-[30px] bg-[#151711] p-5 text-white shadow-[0_18px_50px_rgba(21,23,17,0.16)]">
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">
-                      Lectura rápida
-                    </p>
-                    <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
-                      Qué mirar
-                    </h2>
-                  </div>
-                  <BarChart3 className="h-6 w-6 text-[#d7c77a]" />
-                </div>
-
-                <div className="space-y-3">
-                  <Insight
-                    text={
-                      leader
-                        ? `${leader.name} lidera ${contextLabel} con ${leader.goals} goles.`
-                        : `Sin goleadoras registradas en ${contextLabel}.`
-                    }
-                  />
-                  <Insight
-                    text={
-                      bestDefense
-                        ? `${bestDefense.team} es la mejor defensa de ${contextLabel}.`
-                        : `Sin datos de defensa en ${contextLabel}.`
-                    }
-                  />
-                  <Insight
-                    text={
-                      simulationEnabled
-                        ? "Estas métricas son de prueba y no impactan en la web real."
-                        : "Se actualizan automáticamente con los resultados del panel de administración."
-                    }
-                  />
-                </div>
+              <div className="space-y-4">
+                {teamStats.length === 0 ? (
+                  <Empty text="No hay partidos para esta selección." />
+                ) : (
+                  teamStats.map((team) => (
+                    <TeamBar
+                      key={team.team}
+                      team={team}
+                      max={maxTeamGoals}
+                    />
+                  ))
+                )}
               </div>
             </section>
           </section>
@@ -313,18 +315,13 @@ export default function EstadisticasPage() {
 
         {activeTab === "goleadoras" && (
           <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
-            <div className="mb-5">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
-                Ranking · {contextLabel}
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
-                Tabla de goleadoras
-              </h2>
-            </div>
+            <h2 className="mb-5 text-2xl font-black">
+              Tabla de goleadoras
+            </h2>
 
             <div className="space-y-3">
               {scorers.length === 0 ? (
-                <Empty text="No hay goles cargados para esta competencia y categoría." />
+                <Empty text="No hay goles cargados para esta selección." />
               ) : (
                 scorers.map((player, index) => (
                   <ScorerRow
@@ -341,18 +338,13 @@ export default function EstadisticasPage() {
 
         {activeTab === "fairplay" && (
           <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-4 shadow-sm md:p-6">
-            <div className="mb-5">
-              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
-                Disciplina · {contextLabel}
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-[-0.05em]">
-                Tarjetas registradas
-              </h2>
-            </div>
+            <h2 className="mb-5 text-2xl font-black">
+              Tarjetas registradas
+            </h2>
 
             <div className="grid gap-3 md:grid-cols-2">
               {cards.length === 0 ? (
-                <Empty text="Sin tarjetas registradas para esta competencia y categoría." />
+                <Empty text="Sin tarjetas registradas para esta selección." />
               ) : (
                 cards.map((player) => (
                   <CardStatRow
@@ -383,23 +375,30 @@ function buildStats(matches: MatchItem[]) {
     registerTeam(teamMap, schoolA, 0, 0, false);
     registerTeam(teamMap, schoolB, 0, 0, false);
 
-    const hasFinishedScore =
+    if (
       match.status === "finalizado" &&
       match.scoreA !== null &&
-      match.scoreB !== null;
+      match.scoreB !== null
+    ) {
+      totalGoals += match.scoreA + match.scoreB;
+      registerTeam(
+        teamMap,
+        schoolA,
+        match.scoreA,
+        match.scoreB,
+        true,
+      );
+      registerTeam(
+        teamMap,
+        schoolB,
+        match.scoreB,
+        match.scoreA,
+        true,
+      );
 
-    if (hasFinishedScore) {
-      const scoreA = match.scoreA ?? 0;
-      const scoreB = match.scoreB ?? 0;
-
-      totalGoals += scoreA + scoreB;
-
-      registerTeam(teamMap, schoolA, scoreA, scoreB, true);
-      registerTeam(teamMap, schoolB, scoreB, scoreA, true);
-
-      if (scoreA > scoreB) {
+      if (match.scoreA > match.scoreB) {
         teamMap.get(schoolA)!.pts += 3;
-      } else if (scoreB > scoreA) {
+      } else if (match.scoreB > match.scoreA) {
         teamMap.get(schoolB)!.pts += 3;
       } else {
         teamMap.get(schoolA)!.pts += 1;
@@ -408,36 +407,42 @@ function buildStats(matches: MatchItem[]) {
     }
 
     for (const event of match.events) {
-      const rawTeam = event.team === "teamA" ? match.teamA : match.teamB;
-      const teamName = getSchoolName(rawTeam);
+      const teamName = getSchoolName(
+        event.team === "teamA" ? match.teamA : match.teamB,
+      );
       const playerName = event.player.trim();
+      if (!playerName) continue;
       const key = `${playerName}-${teamName}`;
 
-      if (event.type === "goal" && playerName) {
-        const prev = scorersMap.get(key);
+      if (event.type === "goal") {
+        const previous = scorersMap.get(key);
         scorersMap.set(key, {
           name: playerName,
           team: teamName,
-          goals: prev ? prev.goals + 1 : 1,
+          goals: (previous?.goals ?? 0) + 1,
         });
+        continue;
       }
 
       if (
-        (event.type === "green_card" || event.type === "yellow_card") &&
-        playerName
+        event.type === "green_card" ||
+        event.type === "yellow_card" ||
+        event.type === "red_card"
       ) {
-        const prevCard = cardsMap.get(key);
+        const previous = cardsMap.get(key);
+
         cardsMap.set(key, {
           name: playerName,
           team: teamName,
           green:
-            event.type === "green_card"
-              ? (prevCard?.green ?? 0) + 1
-              : (prevCard?.green ?? 0),
+            (previous?.green ?? 0) +
+            (event.type === "green_card" ? 1 : 0),
           yellow:
-            event.type === "yellow_card"
-              ? (prevCard?.yellow ?? 0) + 1
-              : (prevCard?.yellow ?? 0),
+            (previous?.yellow ?? 0) +
+            (event.type === "yellow_card" ? 1 : 0),
+          red:
+            (previous?.red ?? 0) +
+            (event.type === "red_card" ? 1 : 0),
         });
       }
     }
@@ -452,11 +457,16 @@ function buildStats(matches: MatchItem[]) {
         a.team.localeCompare(b.team),
     ),
     scorers: [...scorersMap.values()].sort(
-      (a, b) => b.goals - a.goals || a.name.localeCompare(b.name),
+      (a, b) =>
+        b.goals - a.goals ||
+        a.name.localeCompare(b.name),
     ),
     cards: [...cardsMap.values()].sort(
       (a, b) =>
-        b.green + b.yellow - (a.green + a.yellow) ||
+        b.red * 100 +
+          b.yellow * 10 +
+          b.green -
+          (a.red * 100 + a.yellow * 10 + a.green) ||
         a.name.localeCompare(b.name),
     ),
     totalGoals,
@@ -480,33 +490,50 @@ function registerTeam(
     });
   }
 
-  const prev = map.get(team)!;
-  prev.goals += goals;
-  prev.against += against;
-  if (played) prev.played += 1;
+  const previous = map.get(team)!;
+  previous.goals += goals;
+  previous.against += against;
+  if (played) previous.played += 1;
 }
 
-function getCompetition(category: string): CompetitionFilter | "Otro" {
+function getCompetition(
+  category: string,
+): CompetitionFilter | "Otro" {
   const normalized = normalizeText(category);
   if (normalized.includes("colegial")) return "Colegial";
-  if (normalized.includes("federado") || normalized.includes("federal")) {
+  if (
+    normalized.includes("federado") ||
+    normalized.includes("federal")
+  ) {
     return "Federado";
   }
   return "Otro";
 }
 
-function getBaseCategory(category: string): CategoryFilter | "Otra" {
+function getBaseCategory(
+  category: string,
+): CategoryFilter | "Otra" {
   const normalized = normalizeText(category);
-  if (normalized.includes("categoria 1")) return "Categoría 1";
-  if (normalized.includes("categoria 2")) return "Categoría 2";
-  if (normalized.includes("categoria 3")) return "Categoría 3";
+  if (normalized.includes("categoria 1")) {
+    return "Categoría 1";
+  }
+  if (normalized.includes("categoria 2")) {
+    return "Categoría 2";
+  }
+  if (normalized.includes("categoria 3")) {
+    return "Categoría 3";
+  }
   return "Otra";
 }
 
 function getSchoolName(team: string) {
   const normalized = normalizeText(team);
 
-  if (normalized.includes("candiles") || normalized === "lcd" || normalized.startsWith("lcd ")) {
+  if (
+    normalized.includes("candiles") ||
+    normalized === "lcd" ||
+    normalized.startsWith("lcd ")
+  ) {
     return "LOS CANDILES";
   }
   if (normalized.includes("mirasoles")) return "MIRASOLES";
@@ -516,7 +543,10 @@ function getSchoolName(team: string) {
   if (normalized.includes("cerros")) return "LOS CERROS";
   if (normalized.includes("portezuelo")) return "PORTEZUELO";
 
-  return team.replace(/\s*\([123][CF]\)\s*$/i, "").trim().toUpperCase();
+  return team
+    .replace(/\s*\([123][CF]\)\s*$/i, "")
+    .trim()
+    .toUpperCase();
 }
 
 function normalizeText(value: string) {
@@ -558,10 +588,10 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.1em] transition ${
+      className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.1em] ${
         active
-          ? "border-[#151711] bg-[#151711] text-white shadow-sm"
-          : "border-[#ded9cc] bg-[#fbfaf6] text-[#62675d] hover:border-[#151711]/30"
+          ? "border-[#151711] bg-[#151711] text-white"
+          : "border-[#ded9cc] bg-[#fbfaf6] text-[#62675d]"
       }`}
     >
       {children}
@@ -582,7 +612,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-2.5 text-xs font-black transition sm:px-4 sm:text-sm ${
+      className={`rounded-full px-3 py-2.5 text-xs font-black ${
         active ? "bg-[#151711] text-white" : "text-[#74786a]"
       }`}
     >
@@ -604,7 +634,7 @@ function DayButton({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition ${
+      className={`rounded-full px-3 py-2 text-[10px] font-black uppercase ${
         active ? "bg-[#151711] text-white" : "text-[#74786a]"
       }`}
     >
@@ -631,42 +661,47 @@ function MetricCard({
           <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#74786a]">
             {label}
           </p>
-          <p className="mt-2 text-3xl font-black tracking-[-0.06em]">{value}</p>
+          <p className="mt-2 text-3xl font-black">{value}</p>
         </div>
         <span className="rounded-full bg-[#151711] p-2 text-[#d7c77a]">
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className="mt-2 text-[10px] font-bold text-[#74786a]">{detail}</p>
+      <p className="mt-2 text-[10px] font-bold text-[#74786a]">
+        {detail}
+      </p>
     </article>
   );
 }
 
-function TeamBar({ team, max }: { team: TeamStats; max: number }) {
-  const width = team.goals === 0 ? 8 : Math.max(8, (team.goals / max) * 100);
+function TeamBar({
+  team,
+  max,
+}: {
+  team: TeamStats;
+  max: number;
+}) {
+  const width =
+    team.goals === 0
+      ? 8
+      : Math.max(8, (team.goals / max) * 100);
 
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-3">
-        <span className="truncate text-xs font-black uppercase">{team.team}</span>
-        <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.1em] text-[#74786a]">
+        <span className="truncate text-xs font-black uppercase">
+          {team.team}
+        </span>
+        <span className="text-[10px] font-black text-[#74786a]">
           {team.goals} GF
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[#eee9dd]">
         <div
-          className="h-full rounded-full bg-[#151711] transition-[width]"
+          className="h-full rounded-full bg-[#151711]"
           style={{ width: `${width}%` }}
         />
       </div>
-    </div>
-  );
-}
-
-function Insight({ text }: { text: string }) {
-  return (
-    <div className="rounded-2xl bg-white/10 px-4 py-3 text-xs font-bold leading-5 text-white/75">
-      {text}
     </div>
   );
 }
@@ -680,23 +715,30 @@ function ScorerRow({
   position: number;
   maxGoals: number;
 }) {
-  const width = Math.max(8, (player.goals / maxGoals) * 100);
+  const width = Math.max(
+    8,
+    (player.goals / maxGoals) * 100,
+  );
 
   return (
     <article className="rounded-2xl border border-[#e8e2d5] bg-[#fbfaf6] p-4">
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#151711] text-xs font-black text-[#d7c77a]">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#151711] text-xs font-black text-[#d7c77a]">
           {position}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="truncate text-sm font-black">{player.name}</p>
-              <p className="truncate text-[10px] font-black uppercase tracking-[0.13em] text-[#74786a]">
+              <p className="truncate text-sm font-black">
+                {player.name}
+              </p>
+              <p className="truncate text-[10px] font-black uppercase text-[#74786a]">
                 {player.team}
               </p>
             </div>
-            <span className="shrink-0 text-xl font-black">{player.goals}</span>
+            <span className="text-xl font-black">
+              {player.goals}
+            </span>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eee9dd]">
             <div
@@ -715,23 +757,67 @@ function CardStatRow({ player }: { player: CardStat }) {
     <article className="rounded-2xl border border-[#e8e2d5] bg-[#fbfaf6] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-black">{player.name}</p>
-          <p className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.13em] text-[#74786a]">
+          <p className="truncate text-sm font-black">
+            {player.name}
+          </p>
+          <p className="mt-1 truncate text-[10px] font-black uppercase text-[#74786a]">
             {player.team}
           </p>
         </div>
+
         <div className="flex shrink-0 items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">
-            <Square className="h-3 w-3 fill-emerald-600 text-emerald-600" />
-            {player.green}
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700">
-            <Square className="h-3 w-3 fill-amber-400 text-amber-400" />
-            {player.yellow}
-          </span>
+          <CardCounter
+            value={player.green}
+            tone="green"
+            label="Verde"
+          />
+          <CardCounter
+            value={player.yellow}
+            tone="yellow"
+            label="Amarilla"
+          />
+          <CardCounter
+            value={player.red}
+            tone="red"
+            label="Roja"
+          />
         </div>
       </div>
     </article>
+  );
+}
+
+function CardCounter({
+  value,
+  tone,
+  label,
+}: {
+  value: number;
+  tone: "green" | "yellow" | "red";
+  label: string;
+}) {
+  const cls =
+    tone === "green"
+      ? "bg-emerald-50 text-emerald-700"
+      : tone === "yellow"
+        ? "bg-amber-50 text-amber-700"
+        : "bg-red-50 text-red-700";
+
+  const iconCls =
+    tone === "green"
+      ? "fill-emerald-600 text-emerald-600"
+      : tone === "yellow"
+        ? "fill-amber-400 text-amber-400"
+        : "fill-red-600 text-red-600";
+
+  return (
+    <span
+      title={label}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ${cls}`}
+    >
+      <Square className={`h-3 w-3 ${iconCls}`} />
+      {value}
+    </span>
   );
 }
 

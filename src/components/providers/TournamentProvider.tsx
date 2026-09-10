@@ -60,7 +60,10 @@ type TournamentContextType = {
   toggleClock: (matchId: number) => Promise<boolean>;
   resetClock: (matchId: number) => Promise<boolean>;
   resetMatch: (matchId: number) => Promise<boolean>;
-  setPeriod: (matchId: number, period: 1 | 2 | 3 | 4) => Promise<boolean>;
+  setPeriod: (
+    matchId: number,
+    period: 1 | 2 | 3 | 4,
+  ) => Promise<boolean>;
   setFinalScore: (
     matchId: number,
     payload: FinalScorePayload,
@@ -69,7 +72,6 @@ type TournamentContextType = {
 };
 
 const TournamentContext = createContext<TournamentContextType | null>(null);
-const ADMIN_SESSION_KEY = "copa-apdes-admin-password";
 
 export function TournamentProvider({
   children,
@@ -77,10 +79,10 @@ export function TournamentProvider({
   children: React.ReactNode;
 }) {
   const [rawMatches, setRawMatches] = useState<MatchItem[]>([]);
-  const [activeMatchId, setActiveMatchId] = useState<number>(0);
+  const [activeMatchId, setActiveMatchId] = useState(0);
   const [isLive, setIsLive] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [adminPassword, setAdminPassword] = useState("");
+  const [connectionError, setConnectionError] =
+    useState<string | null>(null);
   const [adminReady, setAdminReady] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
 
@@ -96,33 +98,42 @@ export function TournamentProvider({
     [rawMatches],
   );
 
-  const useReturnedMatches = useCallback((nextMatches: MatchItem[]) => {
-    setRawMatches(nextMatches);
-    setActiveMatchId((current) =>
-      nextMatches.some((match) => match.id === current)
-        ? current
-        : (nextMatches[0]?.id ?? 0),
-    );
-    setIsLive(true);
-  }, []);
+  const useReturnedMatches = useCallback(
+    (nextMatches: MatchItem[]) => {
+      setRawMatches(nextMatches);
+      setActiveMatchId((current) =>
+        nextMatches.some((match) => match.id === current)
+          ? current
+          : (nextMatches[0]?.id ?? 0),
+      );
+      setIsLive(true);
+    },
+    [],
+  );
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/tournament", { cache: "no-store" });
+      const response = await fetch("/api/tournament", {
+        cache: "no-store",
+      });
       const result = (await response.json()) as {
         matches?: MatchItem[];
         error?: string;
       };
 
       if (!response.ok || !result.matches) {
-        throw new Error(result.error ?? "No se pudieron leer los partidos.");
+        throw new Error(
+          result.error ?? "No se pudieron leer los partidos.",
+        );
       }
 
       useReturnedMatches(result.matches);
       setConnectionError(null);
     } catch (error) {
       setConnectionError(
-        error instanceof Error ? error.message : "Sin conexión con la base.",
+        error instanceof Error
+          ? error.message
+          : "Sin conexión con la base.",
       );
     }
   }, [useReturnedMatches]);
@@ -133,28 +144,45 @@ export function TournamentProvider({
     const tick = (force = false) => {
       if (document.hidden) return;
 
-      const isAdmin = window.location.pathname.startsWith("/admin");
+      const isAdmin =
+        window.location.pathname.startsWith("/admin");
       const now = Date.now();
 
-      if (force || isAdmin || now - lastPublicRefresh >= 10000) {
+      if (
+        force ||
+        isAdmin ||
+        now - lastPublicRefresh >= 10000
+      ) {
         if (!isAdmin) lastPublicRefresh = now;
         void refresh();
       }
     };
 
-    const initialLoad = window.setTimeout(() => tick(true), 0);
-    const poll = window.setInterval(() => tick(false), 5000);
+    const initialLoad = window.setTimeout(
+      () => tick(true),
+      0,
+    );
+    const poll = window.setInterval(
+      () => tick(false),
+      5000,
+    );
 
     const onVisibilityChange = () => {
       if (!document.hidden) tick(true);
     };
 
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener(
+      "visibilitychange",
+      onVisibilityChange,
+    );
 
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(poll);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibilityChange,
+      );
     };
   }, [refresh]);
 
@@ -163,7 +191,10 @@ export function TournamentProvider({
       setRawMatches((previous) =>
         previous.map((match) =>
           match.isRunning
-            ? { ...match, clockSeconds: match.clockSeconds + 1 }
+            ? {
+                ...match,
+                clockSeconds: match.clockSeconds + 1,
+              }
             : match,
         ),
       );
@@ -172,70 +203,77 @@ export function TournamentProvider({
     return () => window.clearInterval(clock);
   }, []);
 
-  const authenticateAdmin = useCallback(async (password: string) => {
-    setAdminError(null);
-
-    try {
-      const response = await fetch("/api/tournament", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-admin-password": password,
-        },
-        body: JSON.stringify({ action: "authenticate" }),
-      });
-
-      const result = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        setAdminReady(false);
-        setAdminError(result.error ?? "Clave incorrecta.");
-        return false;
-      }
-
-      setAdminPassword(password);
-      setAdminReady(true);
+  const authenticateAdmin = useCallback(
+    async (password: string) => {
+      setAdminError(null);
 
       try {
-        window.sessionStorage.setItem(ADMIN_SESSION_KEY, password);
-      } catch {
-        // La sesión sigue funcionando aunque el navegador bloquee sessionStorage.
-      }
+        const response = await fetch("/api/tournament", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-admin-password": password,
+          },
+          body: JSON.stringify({ action: "authenticate" }),
+        });
 
-      return true;
-    } catch {
-      setAdminReady(false);
-      setAdminError("No se pudo validar la clave.");
-      return false;
-    }
-  }, []);
+        const result = (await response.json()) as {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          setAdminReady(false);
+          setAdminError(
+            result.error ?? "Clave incorrecta.",
+          );
+          return false;
+        }
+
+        setAdminReady(true);
+        return true;
+      } catch {
+        setAdminReady(false);
+        setAdminError("No se pudo validar la clave.");
+        return false;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    const restoreSession = async () => {
-      let saved = "";
-
+    const restore = async () => {
       try {
-        saved = window.sessionStorage.getItem(ADMIN_SESSION_KEY) ?? "";
-      } catch {
-        return;
-      }
+        const response = await fetch("/api/tournament", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ action: "authenticate" }),
+        });
 
-      if (!saved || cancelled) return;
-      await authenticateAdmin(saved);
+        if (!cancelled && response.ok) {
+          setAdminReady(true);
+          setAdminError(null);
+        }
+      } catch {
+        // Si no hay sesión previa, se muestra el login normal.
+      }
     };
 
-    void restoreSession();
+    void restore();
 
     return () => {
       cancelled = true;
     };
-  }, [authenticateAdmin]);
+  }, []);
 
   const sendAdminAction = useCallback(
     async (action: TournamentAction) => {
-      if (!adminReady || !adminPassword) {
+      if (!adminReady) {
         setAdminError(
           "Ingresá la clave de administrador para cargar cambios.",
         );
@@ -247,9 +285,9 @@ export function TournamentProvider({
       try {
         const response = await fetch("/api/tournament", {
           method: "POST",
+          credentials: "same-origin",
           headers: {
             "content-type": "application/json",
-            "x-admin-password": adminPassword,
           },
           body: JSON.stringify(action),
         });
@@ -262,13 +300,11 @@ export function TournamentProvider({
         if (!response.ok || !result.matches) {
           if (response.status === 401) {
             setAdminReady(false);
-            setAdminPassword("");
-            try {
-              window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
-            } catch {}
           }
 
-          setAdminError(result.error ?? "No se pudo guardar el cambio.");
+          setAdminError(
+            result.error ?? "No se pudo guardar el cambio.",
+          );
           return false;
         }
 
@@ -281,7 +317,7 @@ export function TournamentProvider({
         return false;
       }
     },
-    [adminPassword, adminReady, useReturnedMatches],
+    [adminReady, useReturnedMatches],
   );
 
   const value = useMemo<TournamentContextType>(
@@ -296,21 +332,47 @@ export function TournamentProvider({
       refresh,
       authenticateAdmin,
       createMatch: (payload) =>
-        sendAdminAction({ action: "create_match", payload }),
+        sendAdminAction({
+          action: "create_match",
+          payload,
+        }),
       createMatchesBulk: (payload) =>
-        sendAdminAction({ action: "bulk_create_matches", payload }),
+        sendAdminAction({
+          action: "bulk_create_matches",
+          payload,
+        }),
       addEvent: (matchId, payload) =>
-        sendAdminAction({ action: "event", matchId, payload }),
+        sendAdminAction({
+          action: "event",
+          matchId,
+          payload,
+        }),
       undoLastEvent: (matchId) =>
-        sendAdminAction({ action: "undo", matchId }),
+        sendAdminAction({
+          action: "undo",
+          matchId,
+        }),
       toggleClock: (matchId) =>
-        sendAdminAction({ action: "toggle_clock", matchId }),
+        sendAdminAction({
+          action: "toggle_clock",
+          matchId,
+        }),
       resetClock: (matchId) =>
-        sendAdminAction({ action: "reset_clock", matchId }),
+        sendAdminAction({
+          action: "reset_clock",
+          matchId,
+        }),
       resetMatch: (matchId) =>
-        sendAdminAction({ action: "reset_match", matchId }),
+        sendAdminAction({
+          action: "reset_match",
+          matchId,
+        }),
       setPeriod: (matchId, period) =>
-        sendAdminAction({ action: "set_period", matchId, period }),
+        sendAdminAction({
+          action: "set_period",
+          matchId,
+          period,
+        }),
       setFinalScore: (matchId, payload) =>
         sendAdminAction({
           action: "set_final_score",
@@ -318,7 +380,10 @@ export function TournamentProvider({
           payload,
         }),
       finishMatch: (matchId) =>
-        sendAdminAction({ action: "finish", matchId }),
+        sendAdminAction({
+          action: "finish",
+          matchId,
+        }),
     }),
     [
       activeMatchId,
@@ -344,7 +409,9 @@ export function useTournament() {
   const context = useContext(TournamentContext);
 
   if (!context) {
-    throw new Error("useTournament debe usarse dentro de TournamentProvider");
+    throw new Error(
+      "useTournament debe usarse dentro de TournamentProvider",
+    );
   }
 
   return context;

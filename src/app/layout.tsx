@@ -4,6 +4,7 @@ import "./globals.css";
 import BottomNav from "../components/layout/BottomNav";
 import SideNav from "../components/layout/SideNav";
 import SchoolSelectorModal from "../components/SchoolSelectorModal";
+import AdminButtonGuide from "../components/admin/AdminButtonGuide";
 import { SchoolPreferenceProvider } from "../components/providers/SchoolPreferenceProvider";
 import { TournamentProvider } from "../components/providers/TournamentProvider";
 import { SimulationProvider } from "../components/providers/SimulationProvider";
@@ -31,19 +32,20 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased bg-[#f8fafc]`}>
         <TournamentProvider>
           <SimulationProvider>
-          <SchoolPreferenceProvider>
-            <SchoolSelectorModal />
+            <SchoolPreferenceProvider>
+              <SchoolSelectorModal />
+              <AdminButtonGuide />
 
-            <div className="flex h-screen w-full overflow-hidden">
-              <SideNav />
+              <div className="flex h-screen w-full overflow-hidden">
+                <SideNav />
 
-              <main className="relative h-full flex-1 overflow-y-auto scroll-smooth pb-28 md:pb-0">
-                {children}
-              </main>
+                <main className="relative h-full flex-1 overflow-y-auto scroll-smooth pb-28 md:pb-0">
+                  {children}
+                </main>
 
-              <BottomNav />
-            </div>
-          </SchoolPreferenceProvider>
+                <BottomNav />
+              </div>
+            </SchoolPreferenceProvider>
           </SimulationProvider>
         </TournamentProvider>
       </body>

@@ -41,6 +41,7 @@ export default function SimulationAdminPage() {
     setSimulationEnabled,
     refreshSimulation,
     runSimulationBatch,
+    setSimulationBatchDuration,
     syncing,
     syncError,
   } = useSimulation();
@@ -221,6 +222,7 @@ export default function SimulationAdminPage() {
                   tanda={tanda}
                   simulatedResults={simulatedResults}
                   onBatch={runSimulationBatch}
+                  onSetDuration={setSimulationBatchDuration}
                   syncing={syncing}
                 />
               ))}
@@ -271,10 +273,11 @@ function HowTandaWorks() {
       </div>
 
       <p className="mt-4 rounded-2xl bg-[#f6f4ee] px-4 py-3 text-xs font-bold leading-5 text-[#62675d]">
-        El botón <strong>Cargar resultado</strong> abre un partido en
-        particular. Ahí pueden practicar el marcador, la cuenta
-        regresiva, Q1–Q4, goles por nombre y cantidad, tarjetas verde,
-        amarilla y roja, deshacer eventos y finalizar ese partido.
+        Antes de iniciar cada tanda pueden elegir <strong>cuántos minutos dura el período</strong>.
+        Ese tiempo se aplica a todos los partidos de ese horario. El botón{" "}
+        <strong>Cargar resultado</strong> abre un partido en particular para practicar
+        marcador, cuenta regresiva, Q1–Q4, goles por nombre y cantidad, tarjetas
+        verde, amarilla y roja, deshacer eventos y finalizar ese partido.
       </p>
     </section>
   );
@@ -310,11 +313,13 @@ function TandaBlock({
   tanda,
   simulatedResults,
   onBatch,
+  onSetDuration,
   syncing,
 }: {
   tanda: Tanda;
   simulatedResults: ReturnType<typeof useSimulation>["simulatedResults"];
   onBatch: ReturnType<typeof useSimulation>["runSimulationBatch"];
+  onSetDuration: ReturnType<typeof useSimulation>["setSimulationBatchDuration"];
   syncing: boolean;
 }) {
   const matchIds = tanda.matches.map((match) => match.id);
@@ -346,6 +351,34 @@ function TandaBlock({
           reference.elapsedSeconds,
       )
     : 15 * 60;
+
+  const initialMinutes = reference
+    ? Math.max(1, Math.round(reference.durationSeconds / 60))
+    : 15;
+  const [durationMinutes, setDurationMinutes] = useState(
+    String(initialMinutes),
+  );
+
+  useEffect(() => {
+    if (!reference) return;
+    setDurationMinutes(
+      String(
+        Math.max(
+          1,
+          Math.round(reference.durationSeconds / 60),
+        ),
+      ),
+    );
+  }, [reference?.durationSeconds]);
+
+  const applyDuration = async (minutes: number) => {
+    const cleanMinutes = Math.max(
+      1,
+      Math.min(60, Math.trunc(minutes || 15)),
+    );
+    setDurationMinutes(String(cleanMinutes));
+    await onSetDuration(matchIds, cleanMinutes * 60);
+  };
 
   const doBatch = (
     operation: "start" | "pause" | "reset" | "finish",
@@ -383,7 +416,69 @@ function TandaBlock({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="w-full max-w-xl space-y-3 xl:w-auto">
+          <div className="rounded-[22px] border border-[#ded9cc] bg-white p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#74786a]">
+                  Duración del período
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {[5, 10, 12, 15, 20, 25].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      disabled={syncing || running > 0}
+                      onClick={() => void applyDuration(minutes)}
+                      className={`rounded-full border px-3 py-2 text-[10px] font-black disabled:opacity-35 ${
+                        Number(durationMinutes) === minutes
+                          ? "border-[#151711] bg-[#151711] text-white"
+                          : "border-[#ded9cc] bg-[#fbfaf6] text-[#62675d]"
+                      }`}
+                    >
+                      {minutes} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[90px_auto] gap-2">
+                <label>
+                  <span className="mb-1 block text-[8px] font-black uppercase tracking-[0.12em] text-[#74786a]">
+                    Otro
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={durationMinutes}
+                    disabled={syncing || running > 0}
+                    onChange={(event) =>
+                      setDurationMinutes(event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[#ded9cc] bg-[#fbfaf6] px-3 py-2.5 text-center text-sm font-black outline-none disabled:opacity-40"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={syncing || running > 0}
+                  onClick={() =>
+                    void applyDuration(Number(durationMinutes))
+                  }
+                  className="self-end rounded-xl bg-[#151711] px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-white disabled:opacity-35"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+
+            <p className="mt-2 text-[10px] font-bold leading-4 text-[#74786a]">
+              Se aplica a todos los partidos de esta tanda y reinicia sus relojes.
+              Para evitar errores, no puede cambiarse mientras la tanda está corriendo.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <TandaButton
             icon={Play}
             label="Iniciar tanda"
@@ -409,6 +504,7 @@ function TandaBlock({
             disabled={syncing || started === 0 || finished === started}
             onClick={() => doBatch("finish")}
           />
+          </div>
         </div>
       </div>
 

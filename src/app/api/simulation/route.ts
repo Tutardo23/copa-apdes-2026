@@ -77,6 +77,56 @@ export async function POST(request: Request) {
       });
     }
 
+    if (body.action === "batch_duration") {
+      const matchIds = [
+        ...new Set(
+          (body.matchIds ?? [])
+            .map(Number)
+            .filter(Number.isInteger),
+        ),
+      ].slice(0, 30);
+
+      if (matchIds.length === 0) {
+        throw new Error("La tanda no tiene partidos válidos.");
+      }
+
+      const durationSeconds = Math.max(
+        60,
+        Math.min(
+          3600,
+          Math.trunc(Number(body.durationSeconds) || 15 * 60),
+        ),
+      );
+
+      const all = await getSharedSimulation();
+      const nowIso = new Date().toISOString();
+
+      for (const matchId of matchIds) {
+        const current = normalizeForWrite(
+          all[matchId] ?? emptySimulatedResult(),
+        );
+
+        if (current.isRunning) {
+          stopClock(current);
+        }
+
+        current.durationSeconds = durationSeconds;
+        current.elapsedSeconds = 0;
+        current.clockStartedAt = null;
+        current.isRunning = false;
+        current.updatedAt = nowIso;
+
+        await saveSharedSimulation(
+          matchId,
+          normalizeForWrite(current),
+        );
+      }
+
+      return Response.json({
+        results: await getSharedSimulation(),
+      });
+    }
+
     if (body.action === "batch_clock") {
       const matchIds = [
         ...new Set(

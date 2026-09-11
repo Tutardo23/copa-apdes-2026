@@ -91,6 +91,10 @@ type SimulationContextType = {
     matchIds: number[],
     operation: BatchOperation,
   ) => Promise<boolean>;
+  setSimulationBatchDuration: (
+    matchIds: number[],
+    durationSeconds: number,
+  ) => Promise<boolean>;
   getEffectiveMatches: (
     matches: MatchItem[],
   ) => MatchItem[];
@@ -499,6 +503,20 @@ export function SimulationProvider({
       [postAction],
     );
 
+  const setSimulationBatchDuration =
+    useCallback(
+      (
+        matchIds: number[],
+        durationSeconds: number,
+      ) =>
+        postAction({
+          action: "batch_duration",
+          matchIds,
+          durationSeconds,
+        }),
+      [postAction],
+    );
+
   const getEffectiveMatches =
     useCallback(
       (matches: MatchItem[]) => {
@@ -564,6 +582,7 @@ export function SimulationProvider({
         finishSimulationMatch,
         resetSimulationMatch,
         runSimulationBatch,
+        setSimulationBatchDuration,
         getEffectiveMatches,
       }),
       [
@@ -576,6 +595,7 @@ export function SimulationProvider({
         resetSimulationClock,
         resetSimulationMatch,
         runSimulationBatch,
+        setSimulationBatchDuration,
         setSimulationDuration,
         setSimulationEnabled,
         setSimulationPeriod,

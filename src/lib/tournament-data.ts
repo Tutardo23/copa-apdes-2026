@@ -442,6 +442,179 @@ export async function toggleClock(matchId: number) {
   `;
 }
 
+export async function batchClock(
+  matchIds: number[],
+  operation: "start" | "pause" | "reset" | "finish",
+) {
+  const sql = database();
+  const cleanIds = [...new Set(matchIds)]
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, 30);
+
+  if (cleanIds.length === 0) {
+    throw new Error("La tanda no tiene partidos válidos.");
+  }
+
+  const idsJson = JSON.stringify(cleanIds);
+
+  if (operation === "finish") {
+    const rows = await sql`
+      SELECT id, stage, score_a, score_b, penalties
+      FROM copa_matches
+      WHERE id IN (
+        SELECT value::int
+        FROM jsonb_array_elements_text(${idsJson}::jsonb)
+      )
+        AND status <> 'finalizado'
+      ORDER BY id;
+    `;
+
+    for (const row of rows as Array<{
+      id: number;
+      stage: MatchStage;
+      score_a: number | null;
+      score_b: number | null;
+      penalties: string | null;
+    }>) {
+      if (row.score_a === null || row.score_b === null) {
+        throw new Error(
+          "No se puede finalizar la tanda: todavía hay partidos sin marcador.",
+        );
+      }
+
+      if (row.stage !== "grupo" && row.score_a === row.score_b) {
+        const penalties = parsePenaltyScore(row.penalties);
+        if (!penalties || penalties.scoreA === penalties.scoreB) {
+          throw new Error(
+            "No se puede finalizar la tanda: una definición de fase final necesita penales válidos.",
+          );
+        }
+      }
+    }
+
+    await sql`
+      UPDATE copa_matches
+      SET
+        clock_seconds = LEAST(
+          duration_seconds,
+          clock_seconds +
+          CASE
+            WHEN is_running AND clock_started_at IS NOT NULL
+              THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+            ELSE 0
+          END
+        ),
+        clock_started_at = NULL,
+        is_running = FALSE,
+        status = 'finalizado',
+        updated_at = NOW()
+      WHERE id IN (
+        SELECT value::int
+        FROM jsonb_array_elements_text(${idsJson}::jsonb)
+      )
+        AND status <> 'finalizado';
+    `;
+    return;
+  }
+
+  if (operation === "start") {
+    await sql`
+      UPDATE copa_matches
+      SET
+        clock_seconds = CASE
+          WHEN clock_seconds >= duration_seconds THEN 0
+          ELSE clock_seconds
+        END,
+        clock_started_at = NOW(),
+        is_running = TRUE,
+        status = 'en_curso',
+        updated_at = NOW()
+      WHERE id IN (
+        SELECT value::int
+        FROM jsonb_array_elements_text(${idsJson}::jsonb)
+      )
+        AND status <> 'finalizado'
+        AND is_running = FALSE;
+    `;
+    return;
+  }
+
+  if (operation === "pause") {
+    await sql`
+      UPDATE copa_matches
+      SET
+        clock_seconds = LEAST(
+          duration_seconds,
+          clock_seconds +
+          CASE
+            WHEN clock_started_at IS NOT NULL
+              THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+            ELSE 0
+          END
+        ),
+        clock_started_at = NULL,
+        is_running = FALSE,
+        updated_at = NOW()
+      WHERE id IN (
+        SELECT value::int
+        FROM jsonb_array_elements_text(${idsJson}::jsonb)
+      )
+        AND status <> 'finalizado'
+        AND is_running = TRUE;
+    `;
+    return;
+  }
+
+  await sql`
+    UPDATE copa_matches
+    SET
+      clock_seconds = 0,
+      clock_started_at = NULL,
+      is_running = FALSE,
+      updated_at = NOW()
+    WHERE id IN (
+      SELECT value::int
+      FROM jsonb_array_elements_text(${idsJson}::jsonb)
+    )
+      AND status <> 'finalizado';
+  `;
+}
+
+export async function setBatchDuration(
+  matchIds: number[],
+  durationSeconds: number,
+) {
+  const sql = database();
+  const cleanIds = [...new Set(matchIds)]
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, 30);
+
+  if (cleanIds.length === 0) {
+    throw new Error("La tanda no tiene partidos válidos.");
+  }
+
+  const cleanDuration = Math.max(
+    60,
+    Math.min(3600, Math.trunc(durationSeconds)),
+  );
+  const idsJson = JSON.stringify(cleanIds);
+
+  await sql`
+    UPDATE copa_matches
+    SET
+      duration_seconds = ${cleanDuration},
+      clock_seconds = 0,
+      clock_started_at = NULL,
+      is_running = FALSE,
+      updated_at = NOW()
+    WHERE id IN (
+      SELECT value::int
+      FROM jsonb_array_elements_text(${idsJson}::jsonb)
+    )
+      AND status <> 'finalizado';
+  `;
+}
+
 export async function setDuration(matchId: number, durationSeconds: number) {
   const sql = database();
   const cleanDuration = Math.max(60, Math.min(3600, Math.trunc(durationSeconds)));
@@ -468,7 +641,6 @@ export async function resetClock(matchId: number) {
       clock_seconds = 0,
       clock_started_at = NULL,
       is_running = FALSE,
-      period = 1,
       updated_at = NOW()
     WHERE id = ${matchId}
       AND status <> 'finalizado';
@@ -598,30 +770,25 @@ export async function finishMatch(matchId: number) {
   const sql = database();
   const match = await getWritableMatch(matchId);
 
-  if (match.stage !== "grupo") {
-    if (
-      match.score_a === null ||
-      match.score_b === null
-    ) {
+  if (match.score_a === null || match.score_b === null) {
+    throw new Error(
+      "Cargá un resultado antes de finalizar este partido.",
+    );
+  }
+
+  if (match.stage !== "grupo" && match.score_a === match.score_b) {
+    const penalties = parsePenaltyScore(match.penalties);
+
+    if (!penalties) {
       throw new Error(
-        "Cargá un resultado antes de finalizar este partido.",
+        "En fase final, un empate necesita definición por penales.",
       );
     }
 
-    if (match.score_a === match.score_b) {
-      const penalties = parsePenaltyScore(match.penalties);
-
-      if (!penalties) {
-        throw new Error(
-          "En fase final, un empate necesita definición por penales.",
-        );
-      }
-
-      if (penalties.scoreA === penalties.scoreB) {
-        throw new Error(
-          "Los penales no pueden terminar empatados.",
-        );
-      }
+    if (penalties.scoreA === penalties.scoreB) {
+      throw new Error(
+        "Los penales no pueden terminar empatados.",
+      );
     }
   }
 

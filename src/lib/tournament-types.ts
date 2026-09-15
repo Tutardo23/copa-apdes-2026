@@ -88,6 +88,11 @@ export type TournamentAction =
     }
   | { action: "undo"; matchId: number }
   | { action: "toggle_clock"; matchId: number }
+  | {
+      action: "batch_clock";
+      matchIds: number[];
+      operation: "start" | "pause" | "reset" | "finish";
+    }
   | { action: "set_duration"; matchId: number; durationSeconds: number }
   | { action: "batch_duration"; matchIds: number[]; durationSeconds: number }
   | { action: "reset_clock"; matchId: number }

@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import { applyTournamentProgression } from "@/src/lib/tournament-engine";
 import type {
   MatchEvent,
@@ -110,6 +111,7 @@ export function SimulationProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [
     simulationEnabled,
     setSimulationEnabledState,
@@ -149,6 +151,15 @@ export function SimulationProvider({
     },
     [],
   );
+
+  useEffect(() => {
+    const isRealAdmin =
+      pathname === "/admin" || pathname.startsWith("/admin/partido/");
+
+    if (isRealAdmin && simulationEnabled) {
+      setSimulationEnabled(false);
+    }
+  }, [pathname, setSimulationEnabled, simulationEnabled]);
 
   const refreshSimulation =
     useCallback(async () => {

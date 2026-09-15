@@ -1,11 +1,13 @@
 import {
   addEvent,
+  batchClock,
   createMatch,
   createMatchesBulk,
   finishMatch,
   getMatches,
   resetClock,
   resetMatch,
+  setBatchDuration,
   setDuration,
   setFinalScore,
   setPeriod,
@@ -103,6 +105,20 @@ export async function POST(request: Request) {
       return Response.json({ matches: await getMatches() });
     }
 
+    if (action.action === "batch_clock") {
+      const matchIds = [
+        ...new Set(action.matchIds.map(Number).filter(Number.isInteger)),
+      ].slice(0, 30);
+      const operation = action.operation;
+
+      if (!["start", "pause", "reset", "finish"].includes(operation)) {
+        throw new Error("Acción de tanda inválida.");
+      }
+
+      await batchClock(matchIds, operation);
+      return Response.json({ matches: await getMatches() });
+    }
+
     if (action.action === "batch_duration") {
       const matchIds = [...new Set(action.matchIds.map(Number).filter(Number.isInteger))].slice(0, 30);
       const durationSeconds = Math.max(60, Math.min(3600, Math.trunc(Number(action.durationSeconds) || 900)));
@@ -111,9 +127,7 @@ export async function POST(request: Request) {
         throw new Error("La tanda no tiene partidos válidos.");
       }
 
-      for (const matchId of matchIds) {
-        await setDuration(matchId, durationSeconds);
-      }
+      await setBatchDuration(matchIds, durationSeconds);
 
       return Response.json({ matches: await getMatches() });
     }

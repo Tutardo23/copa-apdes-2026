@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS copa_matches (
   status text NOT NULL DEFAULT 'por_jugar'
     CHECK (status IN ('por_jugar', 'en_curso', 'finalizado')),
   clock_seconds integer NOT NULL DEFAULT 0 CHECK (clock_seconds >= 0),
+  duration_seconds integer NOT NULL DEFAULT 900
+    CHECK (duration_seconds BETWEEN 60 AND 3600),
   clock_started_at timestamptz,
   period integer NOT NULL DEFAULT 1 CHECK (period BETWEEN 1 AND 4),
   is_running boolean NOT NULL DEFAULT false,
@@ -33,7 +35,8 @@ CREATE TABLE IF NOT EXISTS copa_match_events (
   second integer NOT NULL DEFAULT 0 CHECK (second BETWEEN 0 AND 59),
   period integer NOT NULL CHECK (period BETWEEN 1 AND 4),
   team text NOT NULL CHECK (team IN ('teamA', 'teamB')),
-  type text NOT NULL CHECK (type IN ('goal', 'green_card', 'yellow_card')),
+  type text NOT NULL
+    CHECK (type IN ('goal', 'green_card', 'yellow_card', 'red_card')),
   player text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );

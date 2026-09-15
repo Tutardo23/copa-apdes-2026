@@ -6,8 +6,10 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import { getTeamDisplayName } from "@/src/lib/schools";
 import { applyTournamentProgression } from "@/src/lib/tournament-engine";
 import type {
@@ -80,6 +82,8 @@ export function TournamentProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const recentAgendaBatchRef = useRef(new Map<string, number>());
   const [rawMatches, setRawMatches] = useState<MatchItem[]>([]);
   const [activeMatchId, setActiveMatchId] = useState(0);
   const [isLive, setIsLive] = useState(false);
@@ -115,9 +119,16 @@ export function TournamentProvider({
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/tournament", {
-        cache: "no-store",
-      });
+      const needsFullPayload =
+        pathname.startsWith("/admin") ||
+        pathname.startsWith("/estadisticas");
+      const endpoint = needsFullPayload
+        ? "/api/tournament"
+        : "/api/tournament/public";
+      const response = await fetch(
+        endpoint,
+        needsFullPayload ? { cache: "no-store" } : undefined,
+      );
       const result = (await response.json()) as {
         matches?: MatchItem[];
         error?: string;
@@ -132,13 +143,14 @@ export function TournamentProvider({
       useReturnedMatches(result.matches);
       setConnectionError(null);
     } catch (error) {
+      setIsLive(false);
       setConnectionError(
         error instanceof Error
           ? error.message
           : "Sin conexión con la base.",
       );
     }
-  }, [useReturnedMatches]);
+  }, [pathname, useReturnedMatches]);
 
   useEffect(() => {
     let lastPublicRefresh = 0;
@@ -329,6 +341,57 @@ export function TournamentProvider({
     [adminReady, useReturnedMatches],
   );
 
+  const sendAgendaBatch = useCallback(
+    async (
+      matchId: number,
+      operation: "start" | "pause" | "reset" | "finish",
+    ) => {
+      const isAgenda = pathname === "/admin" || pathname === "/admin/";
+      if (!isAgenda) return null;
+
+      const match = matches.find((item) => item.id === matchId);
+      if (!match) return false;
+
+      const group = matches.filter(
+        (item) =>
+          item.day === match.day &&
+          item.timeLabel.trim() === match.timeLabel.trim(),
+      );
+      const matchIds = group.map((item) => item.id);
+      const key = `${match.day}|${match.timeLabel}|${operation}`;
+      const now = Date.now();
+      const previous = recentAgendaBatchRef.current.get(key) ?? 0;
+
+      if (now - previous < 3000) {
+        return true;
+      }
+
+      recentAgendaBatchRef.current.set(key, now);
+
+      if (operation === "finish") {
+        const pendingWithoutScore = group.filter(
+          (item) =>
+            item.status !== "finalizado" &&
+            (item.scoreA === null || item.scoreB === null),
+        );
+
+        if (pendingWithoutScore.length > 0) {
+          setAdminError(
+            `No se puede finalizar la tanda: faltan ${pendingWithoutScore.length} marcador(es).`,
+          );
+          return false;
+        }
+      }
+
+      return sendAdminAction({
+        action: "batch_clock",
+        matchIds,
+        operation,
+      });
+    },
+    [matches, pathname, sendAdminAction],
+  );
+
   const value = useMemo<TournamentContextType>(
     () => ({
       matches,
@@ -361,16 +424,28 @@ export function TournamentProvider({
           action: "undo",
           matchId,
         }),
-      toggleClock: (matchId) =>
-        sendAdminAction({
+      toggleClock: async (matchId) => {
+        const match = matches.find((item) => item.id === matchId);
+        const agendaResult = await sendAgendaBatch(
+          matchId,
+          match?.isRunning ? "pause" : "start",
+        );
+        if (agendaResult !== null) return agendaResult;
+
+        return sendAdminAction({
           action: "toggle_clock",
           matchId,
-        }),
-      resetClock: (matchId) =>
-        sendAdminAction({
+        });
+      },
+      resetClock: async (matchId) => {
+        const agendaResult = await sendAgendaBatch(matchId, "reset");
+        if (agendaResult !== null) return agendaResult;
+
+        return sendAdminAction({
           action: "reset_clock",
           matchId,
-        }),
+        });
+      },
       setMatchDuration: (matchId, durationSeconds) =>
         sendAdminAction({
           action: "set_duration",
@@ -400,11 +475,15 @@ export function TournamentProvider({
           matchId,
           payload,
         }),
-      finishMatch: (matchId) =>
-        sendAdminAction({
+      finishMatch: async (matchId) => {
+        const agendaResult = await sendAgendaBatch(matchId, "finish");
+        if (agendaResult !== null) return agendaResult;
+
+        return sendAdminAction({
           action: "finish",
           matchId,
-        }),
+        });
+      },
     }),
     [
       activeMatchId,
@@ -416,6 +495,7 @@ export function TournamentProvider({
       matches,
       refresh,
       sendAdminAction,
+      sendAgendaBatch,
     ],
   );
 

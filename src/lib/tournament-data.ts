@@ -26,6 +26,7 @@ type MatchRow = {
   score_b: number | null;
   status: MatchStatus;
   clock_seconds: number;
+  duration_seconds: number;
   period: 1 | 2 | 3 | 4;
   is_running: boolean;
   featured: boolean;
@@ -67,13 +68,17 @@ export async function getMatches(): Promise<MatchItem[]> {
       m.score_a,
       m.score_b,
       m.status,
-      (
+      m.duration_seconds,
+      LEAST(
+        m.duration_seconds,
+        (
         m.clock_seconds +
         CASE
           WHEN m.is_running AND m.clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - m.clock_started_at)))::int
           ELSE 0
         END
+        )
       )::int AS clock_seconds,
       m.period,
       m.is_running,
@@ -119,8 +124,9 @@ export async function getMatches(): Promise<MatchItem[]> {
     scoreB: row.score_b,
     status: row.status,
     clockSeconds: row.clock_seconds,
+    durationSeconds: row.duration_seconds,
     period: row.period,
-    isRunning: row.is_running,
+    isRunning: row.is_running && row.clock_seconds < row.duration_seconds,
     featured: row.featured,
     stage: row.stage,
     penalties: row.penalties,
@@ -233,13 +239,18 @@ async function getWritableMatch(matchId: number) {
       period,
       stage,
       penalties,
-      (
+      duration_seconds,
+      is_running,
+      LEAST(
+        duration_seconds,
+        (
         clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
           ELSE 0
         END
+        )
       )::int AS clock_seconds
     FROM copa_matches
     WHERE id = ${matchId};
@@ -258,6 +269,8 @@ async function getWritableMatch(matchId: number) {
     stage: MatchStage;
     penalties: string | null;
     clock_seconds: number;
+    duration_seconds: number;
+    is_running: boolean;
   };
 }
 
@@ -374,20 +387,72 @@ export async function toggleClock(matchId: number) {
     UPDATE copa_matches
     SET
       clock_seconds =
-        clock_seconds +
         CASE
-          WHEN is_running AND clock_started_at IS NOT NULL
-            THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
-          ELSE 0
+          WHEN is_running THEN
+            CASE
+              WHEN (
+                clock_seconds +
+                CASE
+                  WHEN clock_started_at IS NOT NULL
+                    THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+                  ELSE 0
+                END
+              ) >= duration_seconds
+              THEN 0
+              ELSE clock_seconds +
+                CASE
+                  WHEN clock_started_at IS NOT NULL
+                    THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+                  ELSE 0
+                END
+            END
+          WHEN clock_seconds >= duration_seconds THEN 0
+          ELSE clock_seconds
         END,
       clock_started_at =
-        CASE WHEN is_running THEN NULL ELSE NOW() END,
-      is_running = NOT is_running,
-      status =
         CASE
-          WHEN status = 'finalizado' THEN status
-          ELSE 'en_curso'
+          WHEN is_running AND (
+            clock_seconds +
+            CASE
+              WHEN clock_started_at IS NOT NULL
+                THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+              ELSE 0
+            END
+          ) < duration_seconds
+          THEN NULL
+          ELSE NOW()
         END,
+      is_running =
+        CASE
+          WHEN is_running AND (
+            clock_seconds +
+            CASE
+              WHEN clock_started_at IS NOT NULL
+                THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
+              ELSE 0
+            END
+          ) < duration_seconds
+          THEN FALSE
+          ELSE TRUE
+        END,
+      status = CASE WHEN status = 'finalizado' THEN status ELSE 'en_curso' END,
+      updated_at = NOW()
+    WHERE id = ${matchId}
+      AND status <> 'finalizado';
+  `;
+}
+
+export async function setDuration(matchId: number, durationSeconds: number) {
+  const sql = database();
+  const cleanDuration = Math.max(60, Math.min(3600, Math.trunc(durationSeconds)));
+
+  await sql`
+    UPDATE copa_matches
+    SET
+      duration_seconds = ${cleanDuration},
+      clock_seconds = 0,
+      clock_started_at = NULL,
+      is_running = FALSE,
       updated_at = NOW()
     WHERE id = ${matchId}
       AND status <> 'finalizado';
@@ -494,13 +559,15 @@ export async function setFinalScore(
           THEN 'finalizado'
           ELSE 'en_curso'
         END,
-      clock_seconds =
+      clock_seconds = LEAST(
+        duration_seconds,
         clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
           ELSE 0
-        END,
+        END
+      ),
       clock_started_at = NULL,
       is_running = FALSE,
       updated_at = NOW()
@@ -516,7 +583,12 @@ export async function setPeriod(
 
   await sql`
     UPDATE copa_matches
-    SET period = ${period}, updated_at = NOW()
+    SET
+      period = ${period},
+      clock_seconds = 0,
+      clock_started_at = NULL,
+      is_running = FALSE,
+      updated_at = NOW()
     WHERE id = ${matchId}
       AND status <> 'finalizado';
   `;
@@ -556,13 +628,15 @@ export async function finishMatch(matchId: number) {
   await sql`
     UPDATE copa_matches
     SET
-      clock_seconds =
+      clock_seconds = LEAST(
+        duration_seconds,
         clock_seconds +
         CASE
           WHEN is_running AND clock_started_at IS NOT NULL
             THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - clock_started_at)))::int
           ELSE 0
-        END,
+        END
+      ),
       clock_started_at = NULL,
       is_running = FALSE,
       status = 'finalizado',

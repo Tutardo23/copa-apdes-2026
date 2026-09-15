@@ -31,6 +31,7 @@ export type MatchItem = {
   scoreB: number | null;
   status: MatchStatus;
   clockSeconds: number;
+  durationSeconds: number;
   period: 1 | 2 | 3 | 4;
   isRunning: boolean;
   featured: boolean;
@@ -87,6 +88,8 @@ export type TournamentAction =
     }
   | { action: "undo"; matchId: number }
   | { action: "toggle_clock"; matchId: number }
+  | { action: "set_duration"; matchId: number; durationSeconds: number }
+  | { action: "batch_duration"; matchIds: number[]; durationSeconds: number }
   | { action: "reset_clock"; matchId: number }
   | { action: "reset_match"; matchId: number }
   | { action: "set_period"; matchId: number; period: 1 | 2 | 3 | 4 }

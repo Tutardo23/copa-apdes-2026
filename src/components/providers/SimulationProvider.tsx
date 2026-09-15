@@ -542,6 +542,7 @@ export function SimulationProvider({
                 result.isRunning,
               clockSeconds:
                 result.elapsedSeconds,
+              durationSeconds: result.durationSeconds,
               period: result.period,
               events: buildMatchEvents(
                 match.id,

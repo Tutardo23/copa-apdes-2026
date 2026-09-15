@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -44,6 +44,7 @@ export default function AdminPartidoPage() {
     undoLastEvent,
     toggleClock,
     resetClock,
+    setMatchDuration,
     resetMatch,
     setPeriod,
     setFinalScore,
@@ -61,7 +62,12 @@ export default function AdminPartidoPage() {
   const [scoreBInput, setScoreBInput] = useState("0");
   const [penaltyAInput, setPenaltyAInput] = useState("");
   const [penaltyBInput, setPenaltyBInput] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("15");
   const [savingEvent, setSavingEvent] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const draftDirtyRef = useRef(false);
+  const loadedDraftForMatchRef = useRef<number | null>(null);
   const [modal, setModal] = useState<{
     open: boolean;
     team: TeamKey | null;
@@ -80,17 +86,113 @@ export default function AdminPartidoPage() {
   }, [matchId, setActiveMatchId]);
 
   useEffect(() => {
-    if (!match) return;
+    if (!match || loadedDraftForMatchRef.current === match.id) return;
+
+    loadedDraftForMatchRef.current = match.id;
+    const key = `copa-real-match-draft-${match.id}`;
+    let restored = false;
+
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          scoreAInput?: string;
+          scoreBInput?: string;
+          penaltyAInput?: string;
+          penaltyBInput?: string;
+        };
+
+        setScoreAInput(draft.scoreAInput ?? String(match.scoreA ?? 0));
+        setScoreBInput(draft.scoreBInput ?? String(match.scoreB ?? 0));
+        setPenaltyAInput(draft.penaltyAInput ?? "");
+        setPenaltyBInput(draft.penaltyBInput ?? "");
+        draftDirtyRef.current = true;
+        setDraftDirty(true);
+        setDraftRestored(true);
+        restored = true;
+      }
+    } catch {
+      // Si el borrador local quedó corrupto, seguimos con Neon.
+    }
+
+    if (!restored) {
+      setScoreAInput(String(match.scoreA ?? 0));
+      setScoreBInput(String(match.scoreB ?? 0));
+      const penalties = parsePenaltyScore(match.penalties);
+      setPenaltyAInput(penalties ? String(penalties.scoreA) : "");
+      setPenaltyBInput(penalties ? String(penalties.scoreB) : "");
+      draftDirtyRef.current = false;
+      setDraftDirty(false);
+      setDraftRestored(false);
+    }
+
+    setDurationMinutes(
+      String(Math.max(1, Math.round(match.durationSeconds / 60))),
+    );
+  }, [match?.id]);
+
+  useEffect(() => {
+    if (!match || draftDirtyRef.current) return;
 
     setScoreAInput(String(match.scoreA ?? 0));
     setScoreBInput(String(match.scoreB ?? 0));
-
     const penalties = parsePenaltyScore(match.penalties);
     setPenaltyAInput(penalties ? String(penalties.scoreA) : "");
     setPenaltyBInput(penalties ? String(penalties.scoreB) : "");
-  }, [match?.id, match?.scoreA, match?.scoreB, match?.penalties]);
+    setDurationMinutes(
+      String(Math.max(1, Math.round(match.durationSeconds / 60))),
+    );
+  }, [
+    match?.scoreA,
+    match?.scoreB,
+    match?.penalties,
+    match?.durationSeconds,
+  ]);
 
-  const formattedTime = formatClock(match?.clockSeconds ?? 0);
+  useEffect(() => {
+    if (!match || !draftDirty) return;
+
+    const key = `copa-real-match-draft-${match.id}`;
+    try {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          scoreAInput,
+          scoreBInput,
+          penaltyAInput,
+          penaltyBInput,
+          updatedAt: Date.now(),
+        }),
+      );
+    } catch {
+      // La carga sigue funcionando aunque el navegador bloquee localStorage.
+    }
+  }, [
+    draftDirty,
+    match?.id,
+    penaltyAInput,
+    penaltyBInput,
+    scoreAInput,
+    scoreBInput,
+  ]);
+
+  useEffect(() => {
+    if (!draftDirty) return;
+
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draftDirty]);
+
+  const remainingSeconds = Math.max(
+    0,
+    (match?.durationSeconds ?? 15 * 60) - (match?.clockSeconds ?? 0),
+  );
+  const formattedTime = formatClock(remainingSeconds);
   const scoreA = Number(scoreAInput);
   const scoreB = Number(scoreBInput);
   const isFinalPhase = Boolean(match && match.stage !== "grupo");
@@ -134,6 +236,24 @@ export default function AdminPartidoPage() {
         .sort(compareMatchesForAdmin)[0] ?? null
     );
   }, [match, matches]);
+
+  const markDraftDirty = () => {
+    draftDirtyRef.current = true;
+    setDraftDirty(true);
+    setDraftRestored(false);
+  };
+
+  const clearLocalDraft = () => {
+    if (!match) return;
+
+    try {
+      window.localStorage.removeItem(`copa-real-match-draft-${match.id}`);
+    } catch {}
+
+    draftDirtyRef.current = false;
+    setDraftDirty(false);
+    setDraftRestored(false);
+  };
 
   const openAction = (team: TeamKey, type: ActionType) => {
     setPlayerName("");
@@ -208,12 +328,16 @@ export default function AdminPartidoPage() {
       penalties = `${penaltyA}-${penaltyB}`;
     }
 
-    await setFinalScore(match.id, {
+    const saved = await setFinalScore(match.id, {
       scoreA,
       scoreB,
       penalties,
       finish: true,
     });
+
+    if (saved) {
+      clearLocalDraft();
+    }
   };
 
   return (
@@ -306,6 +430,14 @@ export default function AdminPartidoPage() {
           </p>
         )}
 
+        {adminReady && match && draftDirty && (
+          <div className="mb-5 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-black leading-5 text-sky-900">
+            {draftRestored
+              ? "Recuperamos un marcador que había quedado sin confirmar en esta computadora. Revisalo y tocá Guardar resultado final cuando corresponda."
+              : "Borrador protegido en esta computadora: si se recarga la página o vuelve a pedir la clave, el marcador escrito se recupera."}
+          </div>
+        )}
+
         {adminReady && !match && (
           <section className="rounded-[30px] border border-[#ded9cc] bg-white/80 p-8 text-center shadow-sm">
             <h1 className="text-4xl font-black">Partido no encontrado</h1>
@@ -333,7 +465,7 @@ export default function AdminPartidoPage() {
                   <ScoreInput
                     label={match.teamA}
                     value={scoreAInput}
-                    onChange={setScoreAInput}
+                    onChange={(value) => { setScoreAInput(value); markDraftDirty(); }}
                   />
                   <span className="pb-4 text-3xl font-black text-[#d7c77a]">
                     :
@@ -341,7 +473,7 @@ export default function AdminPartidoPage() {
                   <ScoreInput
                     label={match.teamB}
                     value={scoreBInput}
-                    onChange={setScoreBInput}
+                    onChange={(value) => { setScoreBInput(value); markDraftDirty(); }}
                   />
                 </div>
 
@@ -354,7 +486,7 @@ export default function AdminPartidoPage() {
                       <ScoreInput
                         label={match.teamA}
                         value={penaltyAInput}
-                        onChange={setPenaltyAInput}
+                        onChange={(value) => { setPenaltyAInput(value); markDraftDirty(); }}
                       />
                       <span className="pb-4 text-2xl font-black text-[#9c8737]">
                         :
@@ -362,7 +494,7 @@ export default function AdminPartidoPage() {
                       <ScoreInput
                         label={match.teamB}
                         value={penaltyBInput}
-                        onChange={setPenaltyBInput}
+                        onChange={(value) => { setPenaltyBInput(value); markDraftDirty(); }}
                       />
                     </div>
                   </section>
@@ -382,9 +514,63 @@ export default function AdminPartidoPage() {
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#74786a]">
                   Cronómetro
                 </p>
-                <h2 className="mt-1 text-5xl font-black tracking-[-0.08em]">
+                <h2 className={`mt-1 text-5xl font-black tracking-[-0.08em] ${remainingSeconds <= 60 ? "text-red-700" : ""}`}>
                   {formattedTime}
                 </h2>
+
+                <div className="mt-4 rounded-2xl border border-[#ded9cc] bg-[#fbfaf6] p-3">
+                  <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#74786a]">
+                    Duración del período
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {[5, 10, 12, 15, 20, 25].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        disabled={match.isRunning || match.status === "finalizado"}
+                        onClick={() => {
+                          setDurationMinutes(String(minutes));
+                          void setMatchDuration(match.id, minutes * 60);
+                        }}
+                        className={`rounded-full border px-3 py-2 text-[10px] font-black disabled:opacity-35 ${
+                          Number(durationMinutes) === minutes
+                            ? "border-[#151711] bg-[#151711] text-white"
+                            : "border-[#ded9cc] bg-white text-[#62675d]"
+                        }`}
+                      >
+                        {minutes} min
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={durationMinutes}
+                      disabled={match.isRunning || match.status === "finalizado"}
+                      onChange={(event) => setDurationMinutes(event.target.value)}
+                      className="rounded-xl border border-[#ded9cc] bg-white px-3 py-2.5 text-center text-sm font-black outline-none disabled:opacity-40"
+                      aria-label="Minutos del período"
+                    />
+                    <button
+                      type="button"
+                      disabled={match.isRunning || match.status === "finalizado"}
+                      onClick={() =>
+                        void setMatchDuration(
+                          match.id,
+                          Math.max(1, Math.min(60, Math.trunc(Number(durationMinutes) || 15))) * 60,
+                        )
+                      }
+                      className="rounded-xl bg-[#151711] px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-white disabled:opacity-35"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[10px] font-bold leading-4 text-[#74786a]">
+                    Cambiar el tiempo reinicia solamente el reloj. No borra marcador, goles ni tarjetas.
+                  </p>
+                </div>
 
                 <div className="mt-4 flex flex-wrap gap-1">
                   {[1, 2, 3, 4].map((period) => (
@@ -418,7 +604,7 @@ export default function AdminPartidoPage() {
                   <ActionBtn
                     onClick={() => void resetClock(match.id)}
                     icon={RotateCcw}
-                    label="Reloj a 0"
+                    label="Reiniciar reloj"
                     disabled={match.status === "finalizado"}
                   />
                   <ActionBtn

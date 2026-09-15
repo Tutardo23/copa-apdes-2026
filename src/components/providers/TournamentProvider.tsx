@@ -59,6 +59,8 @@ type TournamentContextType = {
   undoLastEvent: (matchId: number) => Promise<boolean>;
   toggleClock: (matchId: number) => Promise<boolean>;
   resetClock: (matchId: number) => Promise<boolean>;
+  setMatchDuration: (matchId: number, durationSeconds: number) => Promise<boolean>;
+  setBatchDuration: (matchIds: number[], durationSeconds: number) => Promise<boolean>;
   resetMatch: (matchId: number) => Promise<boolean>;
   setPeriod: (
     matchId: number,
@@ -191,10 +193,17 @@ export function TournamentProvider({
       setRawMatches((previous) =>
         previous.map((match) =>
           match.isRunning
-            ? {
-                ...match,
-                clockSeconds: match.clockSeconds + 1,
-              }
+            ? (() => {
+                const clockSeconds = Math.min(
+                  match.durationSeconds,
+                  match.clockSeconds + 1,
+                );
+                return {
+                  ...match,
+                  clockSeconds,
+                  isRunning: clockSeconds < match.durationSeconds,
+                };
+              })()
             : match,
         ),
       );
@@ -361,6 +370,18 @@ export function TournamentProvider({
         sendAdminAction({
           action: "reset_clock",
           matchId,
+        }),
+      setMatchDuration: (matchId, durationSeconds) =>
+        sendAdminAction({
+          action: "set_duration",
+          matchId,
+          durationSeconds,
+        }),
+      setBatchDuration: (matchIds, durationSeconds) =>
+        sendAdminAction({
+          action: "batch_duration",
+          matchIds,
+          durationSeconds,
         }),
       resetMatch: (matchId) =>
         sendAdminAction({

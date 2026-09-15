@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useTournament } from "@/src/components/providers/TournamentProvider";
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
@@ -14,6 +15,9 @@ import {
   TimerReset,
   Trash2,
   Undo2,
+  RefreshCw,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -36,6 +40,10 @@ type GuideConfig = {
 export default function AdminButtonGuide() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const { refresh, isLive, connectionError } = useTournament();
+  const realMatch = pathname.startsWith("/admin/partido/");
+  const realAgenda = pathname === "/admin" || pathname === "/admin/";
 
   const guide = useMemo(() => getGuide(pathname), [pathname]);
 
@@ -66,7 +74,11 @@ export default function AdminButtonGuide() {
         className="fixed bottom-24 right-4 z-[70] inline-flex items-center gap-2 rounded-full border border-[#ded9cc] bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-[#151711] shadow-[0_12px_35px_rgba(21,23,17,0.18)] md:bottom-6 md:right-6"
       >
         <CircleHelp className="h-4 w-4" />
-        ¿Qué hace cada botón?
+        {realMatch
+          ? "Cómo cargar / Si algo falla"
+          : realAgenda
+            ? "Ayuda para el día de la Copa"
+            : "¿Qué hace cada botón?"}
       </button>
 
       {open && (
@@ -112,6 +124,51 @@ export default function AdminButtonGuide() {
             {guide.warning && (
               <div className="mt-4 rounded-2xl border border-[#d7c77a]/50 bg-[#fff8dc] px-4 py-3 text-xs font-black leading-5 text-[#6f6125]">
                 {guide.warning}
+              </div>
+            )}
+
+            {(realMatch || realAgenda) && (
+              <div className="mt-4 rounded-2xl border border-[#ded9cc] bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`rounded-full p-2 ${isLive && !connectionError ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                      {isLive && !connectionError ? (
+                        <Wifi className="h-4 w-4" />
+                      ) : (
+                        <WifiOff className="h-4 w-4" />
+                      )}
+                    </span>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.08em]">
+                        Estado de la carga
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-[#74786a]">
+                        {connectionError
+                          ? `Atención: ${connectionError}`
+                          : isLive
+                            ? "Conectado a los datos del torneo."
+                            : "Reconectando con los datos del torneo..."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={refreshing}
+                    onClick={async () => {
+                      setRefreshing(true);
+                      try {
+                        await refresh();
+                      } finally {
+                        setRefreshing(false);
+                      }
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#151711] px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-white disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                    {refreshing ? "Leyendo..." : "Releer datos guardados"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -310,74 +367,44 @@ function getGuide(pathname: string): GuideConfig | null {
     };
   }
 
+  if (pathname === "/admin" || pathname === "/admin/") {
+    return {
+      eyebrow: "Carga real · modo Copa",
+      title: "Cómo operar la mesa sin perderse",
+      intro:
+        "Esta guía está pensada para el día de la Copa: qué hacer antes de empezar una tanda, qué tocar durante los partidos y cómo recuperarse si algo parece trabarse.",
+      warning:
+        "Lo guardado queda en Neon. Si una pantalla se recarga o vuelve a pedir la clave, no usen ‘Limpiar partido’ para arreglarlo: vuelvan a entrar y relean los datos guardados.",
+      items: [
+        { title: "1 · Antes de la tanda", description: "Confirmen la duración, revisen que las seis canchas sean las correctas y recién después toquen Iniciar tanda.", icon: Clock3 },
+        { title: "2 · Iniciar / Pausar", description: "Iniciar tanda pone en marcha los relojes. Pausar conserva el tiempo. Si necesitan cambiar duración, primero pausen.", icon: Play },
+        { title: "3 · Cargar resultado", description: "Entren al partido que corresponde. Los goles y tarjetas se guardan al confirmar cada evento. El marcador final se guarda con su botón.", icon: Target },
+        { title: "Si parece trabado", description: "No hagan muchos clics seguidos. Esperen unos segundos y usen ‘Releer datos guardados’. La mesa consulta el servidor periódicamente.", icon: RefreshCw, tone: "warning" },
+        { title: "Si pide la clave", description: "Vuelvan a ingresar. Pedir la clave no borra goles, tarjetas ni resultados que ya hayan sido guardados.", icon: Wifi, tone: "warning" },
+        { title: "Nunca para arreglar conexión", description: "No usen ‘Limpiar partido’ ni ‘Finalizar tanda’ como solución a un error de pantalla. Esos botones cambian datos reales.", icon: Trash2, tone: "danger" },
+      ],
+    };
+  }
+
   if (pathname.startsWith("/admin/partido/")) {
     return {
-      eyebrow: "Carga real",
-      title: "Guía rápida del partido real",
+      eyebrow: "Carga real · partido",
+      title: "Cómo cargar y qué hacer si algo falla",
       intro:
-        "Esta es la pantalla operativa del torneo. Acá sí están cargando información real del partido.",
+        "Úsenlo como protocolo rápido. La prioridad es guardar una cosa por vez, verificar lo que quedó registrado y evitar duplicar cargas si hay una reconexión.",
       warning:
-        "IMPORTANTE: los cambios guardados en esta pantalla impactan en los resultados reales y en las estadísticas públicas.",
+        "Los eventos confirmados quedan guardados en Neon. El marcador que todavía están escribiendo se protege además como borrador en esta computadora hasta que se guarda correctamente.",
       items: [
-        {
-          title: "Guardar resultado final",
-          description:
-            "Guarda el marcador definitivo y finaliza el partido. En una definición empatada también solicita los penales.",
-          icon: CheckCircle2,
-          tone: "warning",
-        },
-        {
-          title: "Q1 · Q2 · Q3 · Q4",
-          description:
-            "Indica en qué período del partido están trabajando para que los eventos queden asociados correctamente.",
-          icon: Clock3,
-        },
-        {
-          title: "Iniciar / Pausar",
-          description:
-            "Inicia o pausa el cronómetro real del partido. El tiempo se mantiene sincronizado con la información guardada.",
-          icon: Play,
-        },
-        {
-          title: "Reloj a 0",
-          description:
-            "Reinicia el cronómetro del partido a 00:00. No borra marcador, goles ni tarjetas.",
-          icon: RotateCcw,
-          tone: "warning",
-        },
-        {
-          title: "Deshacer",
-          description:
-            "Elimina el último evento cargado. Si era un gol, también corrige el marcador asociado.",
-          icon: Undo2,
-          tone: "warning",
-        },
-        {
-          title: "Finalizar",
-          description:
-            "Detiene el reloj y marca el partido como finalizado con la información que ya está cargada.",
-          icon: CheckCircle2,
-          tone: "warning",
-        },
-        {
-          title: "Gol",
-          description:
-            "Carga la goleadora y permite registrar varios goles de la misma jugadora indicando una cantidad.",
-          icon: Target,
-        },
-        {
-          title: "Verde / Amarilla / Roja",
-          description:
-            "Registra la tarjeta de una jugadora. Queda guardada como evento real y alimenta las estadísticas.",
-          icon: Square,
-        },
-        {
-          title: "Limpiar partido",
-          description:
-            "Borra eventos, goles, penales y devuelve el partido al estado pendiente. Usar solamente si realmente necesitan reiniciar ese partido.",
-          icon: Trash2,
-          tone: "danger",
-        },
+        { title: "1 · Mirá partido y cancha", description: "Antes de cargar, revisá horario, cancha, categoría y los dos colegios. Así evitás registrar un evento en el partido equivocado.", icon: Target },
+        { title: "2 · Gol o tarjeta", description: "Elegí equipo, tipo de evento, escribí la jugadora y confirmá. Después de confirmar, el evento queda guardado y puede verse desde otra computadora.", icon: Square },
+        { title: "3 · Marcador", description: "Mientras escribís el marcador queda un borrador protegido en esta PC. Cuando corresponda, tocá Guardar resultado final para enviarlo al servidor.", icon: CheckCircle2 },
+        { title: "4 · Si pide la clave", description: "Volvé a ingresar. No vuelvas a cargar de memoria antes de revisar: lo ya confirmado debe seguir guardado. El borrador del marcador se recupera en esta misma computadora.", icon: Wifi, tone: "warning" },
+        { title: "5 · Si se recarga o se cierra", description: "Abrí de nuevo el mismo partido. Primero revisá los eventos que aparecen. Si había un marcador sin confirmar, esta PC intenta recuperarlo como borrador.", icon: RefreshCw, tone: "warning" },
+        { title: "6 · Si un botón no responde", description: "No lo aprietes varias veces. Esperá unos segundos y tocá ‘Releer datos guardados’. Si reaparece el dato, ya estaba guardado y no hay que duplicarlo.", icon: RefreshCw, tone: "warning" },
+        { title: "7 · Varias computadoras", description: "Si otra PC está cargando el mismo partido, miren primero qué quedó guardado antes de repetir un gol o tarjeta. Eviten dos personas editando el mismo partido al mismo tiempo.", icon: Wifi, tone: "warning" },
+        { title: "Deshacer", description: "Usalo solo si el último evento realmente fue incorrecto. Si era gol, también corrige el marcador asociado.", icon: Undo2, tone: "warning" },
+        { title: "Finalizar", description: "Finaliza el partido con lo que está guardado. Háganlo cuando realmente terminó y después de revisar el marcador.", icon: CheckCircle2, tone: "warning" },
+        { title: "NO usar Limpiar para recuperar", description: "Limpiar partido borra eventos, goles, penales y devuelve el partido a pendiente. No sirve para reconectar ni para refrescar.", icon: Trash2, tone: "danger" },
       ],
     };
   }

@@ -5,6 +5,7 @@ import BottomNav from "../components/layout/BottomNav";
 import SideNav from "../components/layout/SideNav";
 import SchoolSelectorModal from "../components/SchoolSelectorModal";
 import AdminButtonGuide from "../components/admin/AdminButtonGuide";
+import AdminTimeControl from "../components/admin/AdminTimeControl";
 import { SchoolPreferenceProvider } from "../components/providers/SchoolPreferenceProvider";
 import { TournamentProvider } from "../components/providers/TournamentProvider";
 import { SimulationProvider } from "../components/providers/SimulationProvider";
@@ -40,6 +41,7 @@ export default function RootLayout({
                 <SideNav />
 
                 <main className="relative h-full flex-1 overflow-y-auto scroll-smooth pb-28 md:pb-0">
+                  <AdminTimeControl />
                   {children}
                 </main>
 
